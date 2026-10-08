@@ -1,0 +1,528 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Created with Jaspersoft Studio version 6.20.1.final using JasperReports Library version 6.20.1-7584acb244139816654f64e2fd57a00d3e31921e  -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="InterWarehouseTransfer" pageWidth="595" pageHeight="842" columnWidth="555" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20" uuid="612b96e7-c7b8-441e-babf-d69aca7ba6ab">
+	<property name="com.jaspersoft.studio.data.defaultdataadapter" value="InterWarehouseTransfer"/>
+	<style name="Table_TH" mode="Opaque" backcolor="#F0F8FF">
+		<box>
+			<pen lineWidth="0.5" lineColor="#000000"/>
+			<topPen lineWidth="0.5" lineColor="#000000"/>
+			<leftPen lineWidth="0.5" lineColor="#000000"/>
+			<bottomPen lineWidth="0.5" lineColor="#000000"/>
+			<rightPen lineWidth="0.5" lineColor="#000000"/>
+		</box>
+	</style>
+	<style name="Table_CH" mode="Opaque" backcolor="#BFE1FF">
+		<box>
+			<pen lineWidth="0.5" lineColor="#000000"/>
+			<topPen lineWidth="0.5" lineColor="#000000"/>
+			<leftPen lineWidth="0.5" lineColor="#000000"/>
+			<bottomPen lineWidth="0.5" lineColor="#000000"/>
+			<rightPen lineWidth="0.5" lineColor="#000000"/>
+		</box>
+	</style>
+	<style name="Table_TD" mode="Opaque" backcolor="#FFFFFF">
+		<box>
+			<pen lineWidth="0.5" lineColor="#000000"/>
+			<topPen lineWidth="0.5" lineColor="#000000"/>
+			<leftPen lineWidth="0.5" lineColor="#000000"/>
+			<bottomPen lineWidth="0.5" lineColor="#000000"/>
+			<rightPen lineWidth="0.5" lineColor="#000000"/>
+		</box>
+	</style>
+	<subDataset name="InterWarehouseTransferDataset" uuid="314dff4d-e21c-4a94-8f5b-740b5ebbb45e">
+		<property name="com.jaspersoft.studio.data.defaultdataadapter" value="InterWarehouseTransfer"/>
+		<queryString language="json">
+			<![CDATA[itemsList]]>
+		</queryString>
+		<field name="description" class="java.lang.String">
+			<property name="net.sf.jasperreports.json.field.expression" value="description"/>
+			<fieldDescription><![CDATA[description]]></fieldDescription>
+		</field>
+		<field name="product" class="java.lang.String">
+			<property name="net.sf.jasperreports.json.field.expression" value="product"/>
+			<fieldDescription><![CDATA[product]]></fieldDescription>
+		</field>
+		<field name="qty" class="java.lang.Integer">
+			<property name="net.sf.jasperreports.json.field.expression" value="qty"/>
+			<fieldDescription><![CDATA[qty]]></fieldDescription>
+		</field>
+		<field name="receiveqty" class="java.lang.Integer">
+			<property name="net.sf.jasperreports.json.field.expression" value="receiveqty"/>
+			<fieldDescription><![CDATA[receiveqty]]></fieldDescription>
+		</field>
+		<field name="stockunit" class="java.lang.String">
+			<property name="net.sf.jasperreports.json.field.expression" value="stockunit"/>
+			<fieldDescription><![CDATA[stockunit]]></fieldDescription>
+		</field>
+		<field name="productId" class="java.lang.String">
+			<property name="net.sf.jasperreports.json.field.expression" value="product.id"/>
+			<fieldDescription><![CDATA[product.id]]></fieldDescription>
+		</field>
+		<field name="productName" class="java.lang.String">
+			<property name="net.sf.jasperreports.json.field.expression" value="product.name"/>
+			<fieldDescription><![CDATA[product.name]]></fieldDescription>
+		</field>
+		<group name="description">
+			<groupExpression><![CDATA[$F{description}]]></groupExpression>
+		</group>
+		<group name="product">
+			<groupExpression><![CDATA[$F{product}]]></groupExpression>
+		</group>
+		<group name="qty">
+			<groupExpression><![CDATA[$F{qty}]]></groupExpression>
+		</group>
+		<group name="receiveqty">
+			<groupExpression><![CDATA[$F{receiveqty}]]></groupExpression>
+		</group>
+		<group name="stockunit">
+			<groupExpression><![CDATA[$F{stockunit}]]></groupExpression>
+		</group>
+	</subDataset>
+	<queryString language="JSON">
+		<![CDATA[]]>
+	</queryString>
+	<field name="_id" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="_id"/>
+		<fieldDescription><![CDATA[_id]]></fieldDescription>
+	</field>
+	<field name="_rev" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="_rev"/>
+		<fieldDescription><![CDATA[_rev]]></fieldDescription>
+	</field>
+	<field name="audit" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="audit"/>
+		<fieldDescription><![CDATA[audit]]></fieldDescription>
+	</field>
+	<field name="docdate" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="docdate"/>
+		<fieldDescription><![CDATA[docdate]]></fieldDescription>
+	</field>
+	<field name="docid" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="docid"/>
+		<fieldDescription><![CDATA[docid]]></fieldDescription>
+	</field>
+	<field name="docno" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="docno"/>
+		<fieldDescription><![CDATA[docno]]></fieldDescription>
+	</field>
+	<field name="docstatus" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="docstatus"/>
+		<fieldDescription><![CDATA[docstatus]]></fieldDescription>
+	</field>
+	<field name="doctype" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="doctype"/>
+		<fieldDescription><![CDATA[doctype]]></fieldDescription>
+	</field>
+	<field name="fromLocator" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="fromLocator"/>
+		<fieldDescription><![CDATA[fromLocator]]></fieldDescription>
+	</field>
+	<field name="reason" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="reason"/>
+		<fieldDescription><![CDATA[reason]]></fieldDescription>
+	</field>
+	<field name="toLocator" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="toLocator"/>
+		<fieldDescription><![CDATA[toLocator]]></fieldDescription>
+	</field>
+	<field name="transfertype" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="transfertype"/>
+		<fieldDescription><![CDATA[transfertype]]></fieldDescription>
+	</field>
+	<field name="auditCreated" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="audit.created"/>
+		<fieldDescription><![CDATA[audit.created]]></fieldDescription>
+	</field>
+	<field name="auditCreatedBy" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="audit.createdBy"/>
+		<fieldDescription><![CDATA[audit.createdBy]]></fieldDescription>
+	</field>
+	<field name="auditUpdated" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="audit.updated"/>
+		<fieldDescription><![CDATA[audit.updated]]></fieldDescription>
+	</field>
+	<field name="auditUpdatedBy" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="audit.updatedBy"/>
+		<fieldDescription><![CDATA[audit.updatedBy]]></fieldDescription>
+	</field>
+	<field name="fromLocatorId" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="fromLocator.id"/>
+		<fieldDescription><![CDATA[fromLocator.id]]></fieldDescription>
+	</field>
+	<field name="fromLocatorName" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="fromLocator.name"/>
+		<fieldDescription><![CDATA[fromLocator.name]]></fieldDescription>
+	</field>
+	<field name="fromLocatorOrgname" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="fromLocator.orgname"/>
+		<fieldDescription><![CDATA[fromLocator.orgname]]></fieldDescription>
+	</field>
+	<field name="fromLocatorType" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="fromLocator.type"/>
+		<fieldDescription><![CDATA[fromLocator.type]]></fieldDescription>
+	</field>
+	<field name="toLocatorId" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="toLocator.id"/>
+		<fieldDescription><![CDATA[toLocator.id]]></fieldDescription>
+	</field>
+	<field name="toLocatorName" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="toLocator.name"/>
+		<fieldDescription><![CDATA[toLocator.name]]></fieldDescription>
+	</field>
+	<field name="toLocatorOrgname" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="toLocator.orgname"/>
+		<fieldDescription><![CDATA[toLocator.orgname]]></fieldDescription>
+	</field>
+	<field name="toLocatorType" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="toLocator.type"/>
+		<fieldDescription><![CDATA[toLocator.type]]></fieldDescription>
+	</field>
+	<field name="reasonLabel" class="java.lang.String">
+		<property name="net.sf.jasperreports.json.field.expression" value="reason.label"/>
+		<fieldDescription><![CDATA[reason.label]]></fieldDescription>
+	</field>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="260" splitType="Stretch">
+			<rectangle>
+				<reportElement x="380" y="54" width="175" height="16" uuid="87afce35-b617-4010-b5d1-61478aed8904"/>
+			</rectangle>
+			<staticText>
+				<reportElement mode="Opaque" x="380" y="0" width="90" height="17" backcolor="#D6D6D6" uuid="65702c77-0022-4b05-bc7d-528bee01af88"/>
+				<box>
+					<topPen lineWidth="1.0"/>
+					<leftPen lineWidth="1.0"/>
+					<bottomPen lineWidth="1.0"/>
+					<rightPen lineWidth="1.0"/>
+				</box>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="8"/>
+				</textElement>
+				<text><![CDATA[Date]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="470" y="0" width="85" height="17" backcolor="#D6D6D6" uuid="174fa7f6-5d1c-49c9-8b6c-03eefc4f6737"/>
+				<box>
+					<topPen lineWidth="1.0"/>
+					<leftPen lineWidth="1.0"/>
+					<bottomPen lineWidth="1.0"/>
+					<rightPen lineWidth="1.0"/>
+				</box>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="8"/>
+				</textElement>
+				<text><![CDATA[Page]]></text>
+			</staticText>
+			<staticText>
+				<reportElement mode="Opaque" x="380" y="40" width="175" height="14" backcolor="#D6D6D6" uuid="26620197-407c-4e23-a7b4-c724cd434198"/>
+				<box>
+					<topPen lineWidth="1.0"/>
+					<leftPen lineWidth="1.0"/>
+					<bottomPen lineWidth="1.0"/>
+					<rightPen lineWidth="1.0"/>
+				</box>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="8"/>
+				</textElement>
+				<text><![CDATA[Transfer Number]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="380" y="17" width="90" height="23" uuid="f39b07a6-f381-4365-8303-5bb1d9717ff9"/>
+				<box>
+					<topPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<leftPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<bottomPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+					<rightPen lineWidth="1.0" lineStyle="Solid" lineColor="#000000"/>
+				</box>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="6" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{auditCreated}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="380" y="54" width="175" height="16" uuid="44a4bdb9-96c3-46f2-98fd-81e13c0215ca"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="6" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{docno}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="470" y="17" width="85" height="23" uuid="519b8f4c-10c8-429c-907a-036d13e8e77c"/>
+				<box>
+					<leftPen lineWidth="1.0"/>
+					<rightPen lineWidth="1.0"/>
+				</box>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="6" isBold="true"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement x="0" y="0" width="180" height="30" uuid="35b56652-ea3c-4bef-aab5-02c9311b8116"/>
+				<textElement textAlignment="Left" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Transfer Note
+Inter Warehouse Transfer (IWT)]]></text>
+			</staticText>
+			<line>
+				<reportElement x="0" y="90" width="555" height="1" uuid="08a7d29e-2072-4978-8041-be03ac2c0e58"/>
+			</line>
+			<rectangle>
+				<reportElement x="0" y="120" width="180" height="60" uuid="1bc29e5f-d850-4053-84fd-adf8de24f425"/>
+			</rectangle>
+			<textField>
+				<reportElement x="0" y="140" width="180" height="20" uuid="671fd8e2-74ec-4738-a517-4609b82aee85">
+					<property name="com.jaspersoft.studio.unit.leftIndent" value="px"/>
+					<property name="com.jaspersoft.studio.unit.rightIndent" value="px"/>
+				</reportElement>
+				<textElement verticalAlignment="Middle">
+					<paragraph leftIndent="8" rightIndent="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{fromLocatorId}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement x="0" y="100" width="180" height="14" uuid="71c02414-1eb0-4b3c-92f6-99c1bae070be"/>
+				<textElement textAlignment="Left" verticalAlignment="Middle"/>
+				<text><![CDATA[Transfer From]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="0" y="160" width="180" height="20" uuid="364ebb77-36b7-46ab-a9a2-1cdb0ea41fb3">
+					<property name="com.jaspersoft.studio.unit.rightIndent" value="px"/>
+				</reportElement>
+				<textElement verticalAlignment="Middle">
+					<paragraph leftIndent="8" rightIndent="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{fromLocatorName}]]></textFieldExpression>
+			</textField>
+			<rectangle>
+				<reportElement x="375" y="120" width="180" height="60" uuid="c73644f6-3beb-4b7d-987c-531f6166f1d5"/>
+			</rectangle>
+			<textField>
+				<reportElement x="375" y="140" width="180" height="20" uuid="65e2d684-f6b4-46bd-9d6d-48a4dfa9e507">
+					<property name="com.jaspersoft.studio.unit.leftIndent" value="px"/>
+					<property name="com.jaspersoft.studio.unit.rightIndent" value="px"/>
+				</reportElement>
+				<textElement verticalAlignment="Middle">
+					<paragraph leftIndent="8" rightIndent="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{toLocatorId}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement x="375" y="100" width="180" height="14" uuid="aedb487f-ec2d-490d-87f4-db4f6668aee1"/>
+				<textElement textAlignment="Left" verticalAlignment="Middle"/>
+				<text><![CDATA[Transfer To]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="375" y="160" width="180" height="20" uuid="5a93de71-2d86-4212-a936-30f458a86d41">
+					<property name="com.jaspersoft.studio.unit.rightIndent" value="px"/>
+				</reportElement>
+				<textElement verticalAlignment="Middle">
+					<paragraph leftIndent="8" rightIndent="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{toLocatorName}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement mode="Opaque" x="0" y="200" width="280" height="20" backcolor="#D6D6D6" uuid="aed6aaab-7f7c-40a9-af5f-d5b3608e613b"/>
+				<box>
+					<pen lineWidth="1.0"/>
+				</box>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Description]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="0" y="220" width="280" height="40" uuid="85d0cb86-cc7e-4313-b737-93df53ae14ba"/>
+				<box>
+					<leftPen lineWidth="1.0"/>
+					<bottomPen lineWidth="1.0"/>
+					<rightPen lineWidth="1.0"/>
+				</box>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression><![CDATA[$F{reasonLabel}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="280" y="220" width="275" height="40" uuid="6963e733-4124-402e-9f48-9a0f29ceaa1f"/>
+				<box>
+					<leftPen lineWidth="1.0"/>
+					<bottomPen lineWidth="1.0"/>
+					<rightPen lineWidth="1.0"/>
+				</box>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression><![CDATA[$F{reasonLabel}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement mode="Opaque" x="280" y="200" width="275" height="20" backcolor="#D6D6D6" uuid="4917a853-ee51-46c9-ad46-8542cadb875e"/>
+				<box>
+					<pen lineWidth="1.0"/>
+				</box>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Reason]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="375" y="120" width="180" height="20" uuid="6ec8a3f8-0665-452e-9283-52e0060559ca">
+					<property name="com.jaspersoft.studio.unit.leftIndent" value="px"/>
+					<property name="com.jaspersoft.studio.unit.rightIndent" value="px"/>
+				</reportElement>
+				<textElement verticalAlignment="Middle">
+					<paragraph leftIndent="8" rightIndent="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{fromLocatorOrgname}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="0" y="120" width="180" height="20" uuid="a97a32ac-5d36-4f60-9e0d-5cea8877dc86">
+					<property name="com.jaspersoft.studio.unit.leftIndent" value="px"/>
+					<property name="com.jaspersoft.studio.unit.rightIndent" value="px"/>
+				</reportElement>
+				<textElement verticalAlignment="Middle">
+					<paragraph leftIndent="8" rightIndent="8"/>
+				</textElement>
+				<textFieldExpression><![CDATA[$F{fromLocatorOrgname}]]></textFieldExpression>
+			</textField>
+		</band>
+	</title>
+	<detail>
+		<band height="80" splitType="Stretch">
+			<componentElement>
+				<reportElement x="0" y="20" width="555" height="60" uuid="6ded9a6e-8904-420b-a4e1-4851a00e76f1">
+					<property name="com.jaspersoft.studio.layout" value="com.jaspersoft.studio.editor.layout.VerticalRowLayout"/>
+					<property name="com.jaspersoft.studio.table.style.table_header" value="Table_TH"/>
+					<property name="com.jaspersoft.studio.table.style.column_header" value="Table_CH"/>
+					<property name="com.jaspersoft.studio.table.style.detail" value="Table_TD"/>
+				</reportElement>
+				<jr:table xmlns:jr="http://jasperreports.sourceforge.net/jasperreports/components" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports/components http://jasperreports.sourceforge.net/xsd/components.xsd">
+					<datasetRun subDataset="InterWarehouseTransferDataset" uuid="aa59a66f-b3a9-4c46-b78e-eca97e3861ad">
+						<dataSourceExpression><![CDATA[((net.sf.jasperreports.engine.data.JsonDataSource)$P{REPORT_DATA_SOURCE}).subDataSource("itemsList")]]></dataSourceExpression>
+					</datasetRun>
+					<jr:column width="138" uuid="bf3c71b1-5f08-4454-a21c-1610dec82104">
+						<property name="com.jaspersoft.studio.components.table.model.column.name" value="Column1"/>
+						<property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+						<jr:columnHeader style="Table_CH" height="30" rowSpan="1">
+							<staticText>
+								<reportElement x="0" y="0" width="138" height="30" uuid="202673e5-03a5-44d7-8dfd-4efc4c36c279"/>
+								<textElement textAlignment="Center" verticalAlignment="Middle">
+									<font isBold="true"/>
+								</textElement>
+								<text><![CDATA[Item No]]></text>
+							</staticText>
+						</jr:columnHeader>
+						<jr:detailCell style="Table_TD" height="30">
+							<textField>
+								<reportElement x="0" y="0" width="138" height="30" uuid="07a3cd70-a8b4-4b4b-af60-b841c2517b3a"/>
+								<textElement textAlignment="Center" verticalAlignment="Middle"/>
+								<textFieldExpression><![CDATA[$F{productId}]]></textFieldExpression>
+							</textField>
+						</jr:detailCell>
+					</jr:column>
+					<jr:column width="252" uuid="a4f7644b-5eb4-4bb9-a571-0882bb09fce3">
+						<property name="com.jaspersoft.studio.components.table.model.column.name" value="Column2"/>
+						<property name="com.jaspersoft.studio.unit.width" value="px"/>
+						<jr:columnHeader style="Table_CH" height="30" rowSpan="1">
+							<staticText>
+								<reportElement x="0" y="0" width="252" height="30" uuid="5638115f-6e96-4003-8fd9-fee6aa19415d"/>
+								<textElement textAlignment="Center" verticalAlignment="Middle">
+									<font isBold="true"/>
+								</textElement>
+								<text><![CDATA[Description]]></text>
+							</staticText>
+						</jr:columnHeader>
+						<jr:detailCell style="Table_TD" height="30">
+							<textField>
+								<reportElement x="0" y="0" width="252" height="30" uuid="1f65ae62-6220-4016-a53f-e8d1789a890f"/>
+								<textElement textAlignment="Center" verticalAlignment="Middle"/>
+								<textFieldExpression><![CDATA[$F{productName}]]></textFieldExpression>
+							</textField>
+						</jr:detailCell>
+					</jr:column>
+					<jr:column width="82" uuid="a5c23fa1-311c-4def-aac6-03081dafd881">
+						<property name="com.jaspersoft.studio.components.table.model.column.name" value="Column3"/>
+						<property name="com.jaspersoft.studio.unit.width" value="px"/>
+						<jr:columnHeader style="Table_CH" height="30" rowSpan="1">
+							<staticText>
+								<reportElement x="0" y="0" width="82" height="30" uuid="956f1e41-2c8c-4ee8-b06b-4a3938c0ae39"/>
+								<textElement textAlignment="Center" verticalAlignment="Middle">
+									<font isBold="true"/>
+								</textElement>
+								<text><![CDATA[QTY]]></text>
+							</staticText>
+						</jr:columnHeader>
+						<jr:detailCell style="Table_TD" height="30">
+							<textField>
+								<reportElement x="0" y="0" width="82" height="30" uuid="0dde36bd-9ef7-498e-aee9-f1fbf2cdd5a8"/>
+								<textElement textAlignment="Center" verticalAlignment="Middle"/>
+								<textFieldExpression><![CDATA[$F{qty}]]></textFieldExpression>
+							</textField>
+						</jr:detailCell>
+					</jr:column>
+					<jr:column width="83" uuid="c7a0733a-779f-40af-a329-ce2d3784787a">
+						<property name="com.jaspersoft.studio.components.table.model.column.name" value="Column4"/>
+						<property name="com.jaspersoft.studio.unit.width" value="px"/>
+						<jr:columnHeader style="Table_CH" height="30" rowSpan="1">
+							<staticText>
+								<reportElement x="0" y="0" width="83" height="30" uuid="d917f5d6-7e7f-4d85-8152-f738b68f0b42"/>
+								<textElement textAlignment="Center" verticalAlignment="Middle">
+									<font isBold="true"/>
+								</textElement>
+								<text><![CDATA[UOM]]></text>
+							</staticText>
+						</jr:columnHeader>
+						<jr:detailCell style="Table_TD" height="30">
+							<textField>
+								<reportElement x="0" y="0" width="83" height="30" uuid="4b2a67b2-e6e0-48c9-bf28-d9d62ab71ea7"/>
+								<textElement textAlignment="Center" verticalAlignment="Middle"/>
+								<textFieldExpression><![CDATA[$F{stockunit}]]></textFieldExpression>
+							</textField>
+						</jr:detailCell>
+					</jr:column>
+				</jr:table>
+			</componentElement>
+		</band>
+	</detail>
+	<pageFooter>
+		<band height="54" splitType="Stretch">
+			<staticText>
+				<reportElement x="0" y="40" width="50" height="10" uuid="9d227f0a-dc77-441a-9a29-32f355f786f9"/>
+				<textElement textAlignment="Left" verticalAlignment="Middle">
+					<font size="6"/>
+				</textElement>
+				<text><![CDATA[Print Date/Time:]]></text>
+			</staticText>
+			<line>
+				<reportElement x="0" y="10" width="110" height="1" uuid="be506e11-5ee1-4172-878b-5b6df2e62cbd"/>
+			</line>
+			<staticText>
+				<reportElement x="0" y="10" width="110" height="20" uuid="bbc98e1a-270b-4788-a19d-807742ad615c"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Issued BY]]></text>
+			</staticText>
+			<line>
+				<reportElement x="225" y="10" width="110" height="1" uuid="b91ebac5-d584-4081-9ca4-86b2b96dee0e"/>
+			</line>
+			<staticText>
+				<reportElement x="225" y="10" width="110" height="20" uuid="8ad1722e-3eba-4b80-9920-4d240df75ba1"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Verify BY]]></text>
+			</staticText>
+			<line>
+				<reportElement x="445" y="10" width="110" height="1" uuid="105e4019-fb0d-4886-8061-871aea1feab4"/>
+			</line>
+			<staticText>
+				<reportElement x="445" y="10" width="110" height="20" uuid="a017e32c-0faa-4c64-933a-c9114863a9e4"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Received BY]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="50" y="40" width="140" height="10" uuid="c39c7dcb-d96e-4ce8-8a4f-37f91054cce5"/>
+				<textElement>
+					<font size="6"/>
+				</textElement>
+				<textFieldExpression><![CDATA[new java.util.Date()]]></textFieldExpression>
+			</textField>
+		</band>
+	</pageFooter>
+</jasperReport>

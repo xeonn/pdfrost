@@ -1,0 +1,47 @@
+{
+  "_id": "central:purchase-1001",
+  "_rev": "1-sample",
+  "audit": {
+    "created": "2026-01-15T10:39:07.736Z",
+    "createdBy": "user.two@example.com",
+    "updated": "2026-01-15T10:39:07.736Z",
+    "updatedBy": "user.two@example.com"
+  },
+  "docdate": "2026/01/15",
+  "docid": "central:purchase-1001",
+  "docno": "1001",
+  "docstatus": "POSTED",
+  "doctype": "PURCHASE",
+  "itemsList": [
+    {
+      "description": "Test",
+      "product": {
+        "id": "SKU-G25",
+        "name": "Sample grain 25kg"
+      },
+      "qty": 5,
+      "rownum": 1,
+      "stockunit": "Ea",
+      "txndate": "2026-01-15T10:39:07Z",
+      "txnid": "central:purchase-1001-1"
+    },
+    {
+      "description": "Item 2",
+      "product": {
+        "id": "SKU-G25",
+        "name": "Sample grain 25kg"
+      },
+      "qty": 10,
+      "rownum": 2,
+      "stockunit": "Ea",
+      "txndate": "2026-01-15T10:39:07Z",
+      "txnid": "central:purchase-1001-2"
+    }
+  ],
+  "locator": {
+    "id": "DOCK-A-RECEIVING",
+    "name": "Dock A - Receiving",
+    "orgname": "central"
+  },
+  "vendorName": "Sample Vendor"
+}

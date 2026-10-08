@@ -1,0 +1,15 @@
+[package]
+name = "pdfrost-wasm"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.92"
+description = "WebAssembly build of the pdfrost engine for the Go package"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+pdfrost-engine = { path = "../pdfrost-engine" }
+serde_json = "1"

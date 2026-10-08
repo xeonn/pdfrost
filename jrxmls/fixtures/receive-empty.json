@@ -1,0 +1,23 @@
+{
+  "_id": "doc-1",
+  "_rev": "1-abc",
+  "audit": {
+    "created": "2026-10-01T08:00:00Z",
+    "createdBy": "ada",
+    "updated": "2026-10-02T09:30:00Z",
+    "updatedBy": "ada"
+  },
+  "docdate": "2026-10-01",
+  "docid": "DOC-1",
+  "docno": "0001",
+  "docstatus": "OPEN",
+  "doctype": "RECEIVE",
+  "vendorName": "Acme Supply",
+  "locator": {
+    "id": "Dock-id",
+    "name": "Dock",
+    "orgname": "Dock Org",
+    "type": "WAREHOUSE"
+  },
+  "itemsList": []
+}

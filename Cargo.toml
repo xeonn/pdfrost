@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = ["crates/pdfrost-engine", "crates/pdfrost-charts", "crates/pdfrost-wasm", "src-tauri"]
+default-members = ["crates/pdfrost-engine", "src-tauri"]
+
+# Size settings for the desktop binary. See https://tauri.app/concept/size/
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

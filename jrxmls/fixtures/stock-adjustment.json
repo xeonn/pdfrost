@@ -1,0 +1,38 @@
+{
+  "_id": "doc-1",
+  "_rev": "1-abc",
+  "audit": {
+    "created": "2026-10-01T08:00:00Z",
+    "createdBy": "ada",
+    "updated": "2026-10-02T09:30:00Z",
+    "updatedBy": "ada"
+  },
+  "docdate": "2026-10-01",
+  "docid": "DOC-1",
+  "docno": "0001",
+  "docstatus": "OPEN",
+  "doctype": "STOCK_ADJUSTMENT",
+  "description": "Cycle count",
+  "reason": "Count variance",
+  "refdoc": "REF-9",
+  "title": "Stock adjustment",
+  "locator": {
+    "id": "Main-id",
+    "name": "Main",
+    "orgname": "Main Org",
+    "type": "WAREHOUSE"
+  },
+  "itemsList": [
+    {
+      "product": {
+        "id": "SKU-001",
+        "name": "Bolt"
+      },
+      "qty": 4,
+      "stockunit": "EA",
+      "txnid": "TXN-001",
+      "txndate": "2026-10-01",
+      "rownum": "1"
+    }
+  ]
+}

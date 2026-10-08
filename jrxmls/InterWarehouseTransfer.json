@@ -1,0 +1,50 @@
+{
+  "_id": "north:TRFW/AA/2026/01/15/0001",
+  "_rev": "1-sample",
+  "audit": {
+    "created": "2026-01-15T23:53:15.530Z",
+    "createdBy": "user.one@example.com",
+    "updated": "2026-01-15T23:53:59.618Z",
+    "updatedBy": "user.one@example.com"
+  },
+  "docdate": "2026/01/15",
+  "docid": "north:TRFW/AA/2026/01/15/0001",
+  "docno": "TRFW/AA/2026/01/15/0001",
+  "docstatus": "POSTED",
+  "doctype": "TRANSFER",
+  "fromLocator": {
+    "id": "DOCK-A-STORAGE",
+    "isdefault": true,
+    "name": "Dock A - Storage",
+    "orgname": "north",
+    "type": "storage"
+  },
+  "itemsList": [
+    {
+      "description": "IWT",
+      "fromTxnid": "north:TRFW/AA/2026/01/15/0001-DOCK-A-STORAGE-1",
+      "product": {
+        "id": "SKU-R50",
+        "name": "Sample rice 50kg"
+      },
+      "qty": 20,
+      "receiveqty": 20,
+      "rownum": 1,
+      "stockunit": "Ea",
+      "toTxnid": "north:TRFW/AA/2026/01/15/0001-DOCK-B-STORAGE-1",
+      "txndate": "2026-01-15T23:53:59Z"
+    }
+  ],
+  "reason": {
+    "label": "TEST DESCRIPTION",
+    "value": "TEST DESCRIPTION"
+  },
+  "toLocator": {
+    "id": "DOCK-B-STORAGE",
+    "isdefault": true,
+    "name": "Dock B - Storage",
+    "orgname": "north",
+    "type": "storage"
+  },
+  "transfertype": "IWT"
+}

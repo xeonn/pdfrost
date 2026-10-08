@@ -1,0 +1,49 @@
+{
+    "_id": "north:DO/AA/2026/01/15/0001",
+    "_rev": "1-sample",
+    "audit": {
+      "created": "2026-01-15T06:29:33.984Z",
+      "createdBy": "user.one@example.com",
+      "updated": "2026-01-15T06:29:33.984Z",
+      "updatedBy": "user.one@example.com"
+    },
+    "customerName": "Sample Shop",
+    "docdate": "2026-01-15T06:29:33.984Z",
+    "docid": "north:DO/AA/2026/01/15/0001",
+    "docno": "DO/AA/2026/01/15/0001",
+    "docstatus": "POSTED",
+    "doctype": "SALE",
+    "invno": "1001",
+    "itemsList": [
+      {
+        "description": "PARTIAL_FULFILLED",
+        "product": {
+          "id": "SKU-I05",
+          "name": "Sample import 5kg"
+        },
+        "qty": 40,
+        "rownum": 1,
+        "stockunit": "Ea",
+        "txndate": "2026-01-15T06:29:33Z",
+        "txnid": "north:DO/AA/2026/01/15/0001-1"
+      },
+      {
+        "description": "PARTIAL_FULFILLED",
+        "product": {
+          "id": "SKU-I10",
+          "name": "Sample import 10kg"
+        },
+        "qty": 25,
+        "rownum": 2,
+        "stockunit": "Ea",
+        "txndate": "2026-01-15T06:29:33Z",
+        "txnid": "north:DO/AA/2026/01/15/0001-2"
+      }
+    ],
+    "locator": {
+      "id": "DOCK-A-CLEARING",
+      "name": "Dock A - Clearing",
+      "orgname": "north",
+      "type": "clearing"
+    }
+  }

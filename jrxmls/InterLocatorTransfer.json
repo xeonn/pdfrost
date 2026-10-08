@@ -1,0 +1,120 @@
+{
+  "_id": "north:TRFL/AA/2026/01/15/0001",
+  "_rev": "1-sample",
+  "audit": {
+    "created": "2026-01-15T03:22:04.587Z",
+    "createdBy": "user.one@example.com",
+    "updated": "2026-01-15T03:22:04.587Z",
+    "updatedBy": "user.one@example.com"
+  },
+  "docdate": "2026-01-15T03:22:04.587Z",
+  "docid": "north:TRFL/AA/2026/01/15/0001",
+  "docno": "TRFL/AA/2026/01/15/0001",
+  "docstatus": "POSTED",
+  "doctype": "TRANSFER",
+  "fromLocator": {
+    "id": "DOCK-A-CLEARING",
+    "name": "Dock A - Clearing",
+    "orgname": "north",
+    "type": "clearing"
+  },
+  "fromodm": "ODM-1",
+  "invno": "1002",
+  "itemsList": [
+    {
+      "description": "CANCELLED",
+      "fromTxnid": "north:TRFL/AA/2026/01/15/0001-DOCK-A-CLEARING-1",
+      "product": {
+        "id": "SKU-I05",
+        "name": "Sample import 5kg"
+      },
+      "qty": 15,
+      "receiveqty": 15,
+      "rownum": 1,
+      "stockunit": "Ea",
+      "toTxnid": "north:TRFL/AA/2026/01/15/0001-DOCK-A-STORAGE-1",
+      "trfreasonList": [
+        {
+          "label": "Sample void reason",
+          "qty": "15",
+          "value": "SAMPLE"
+        }
+      ],
+      "txndate": "2026-01-15T03:22:07Z"
+    },
+    {
+      "description": "CANCELLED",
+      "fromTxnid": "north:TRFL/AA/2026/01/15/0001-DOCK-A-CLEARING-2",
+      "product": {
+        "id": "SKU-F01",
+        "name": "Sample fragrant rice 1kg"
+      },
+      "qty": 30,
+      "receiveqty": 30,
+      "rownum": 2,
+      "stockunit": "Ea",
+      "toTxnid": "north:TRFL/AA/2026/01/15/0001-DOCK-A-STORAGE-2",
+      "trfreasonList": [
+        {
+          "label": "Sample void reason",
+          "qty": "30",
+          "value": "SAMPLE"
+        }
+      ],
+      "txndate": "2026-01-15T03:22:07Z"
+    },
+    {
+      "description": "CANCELLED",
+      "fromTxnid": "north:TRFL/AA/2026/01/15/0001-DOCK-A-CLEARING-3",
+      "product": {
+        "id": "SKU-F05",
+        "name": "Sample fragrant rice 5kg"
+      },
+      "qty": 6,
+      "receiveqty": 6,
+      "rownum": 3,
+      "stockunit": "Ea",
+      "toTxnid": "north:TRFL/AA/2026/01/15/0001-DOCK-A-STORAGE-3",
+      "trfreasonList": [
+        {
+          "label": "Sample void reason",
+          "qty": "6",
+          "value": "SAMPLE"
+        }
+      ],
+      "txndate": "2026-01-15T03:22:07Z"
+    },
+    {
+      "description": "CANCELLED",
+      "fromTxnid": "north:TRFL/AA/2026/01/15/0001-DOCK-A-CLEARING-4",
+      "product": {
+        "id": "SKU-I01",
+        "name": "Sample import 1kg"
+      },
+      "qty": 10,
+      "receiveqty": 10,
+      "rownum": 4,
+      "stockunit": "Ea",
+      "toTxnid": "north:TRFL/AA/2026/01/15/0001-DOCK-A-STORAGE-4",
+      "trfreasonList": [
+        {
+          "label": "Sample void reason",
+          "qty": "10",
+          "value": "SAMPLE"
+        }
+      ],
+      "txndate": "2026-01-15T03:22:07Z"
+    }
+  ],
+  "reason": {
+    "label": "CANCELLED_FULFILLMENT",
+    "value": "CANCELLED_FULFILLMENT"
+  },
+  "toLocator": {
+    "id": "DOCK-A-STORAGE",
+    "name": "Dock A - Storage",
+    "orgname": "north",
+    "type": "storage"
+  },
+  "transfertype": "ILT"
+}

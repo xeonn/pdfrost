@@ -1,0 +1,68 @@
+{"Northwind": {
+    "Customers": [
+      {
+        "Phone": "030-0074321",
+        "PostalCode": 12209,
+        "ContactName": "Maria Anders",
+        "Fax": "030-0076545",
+        "Address": "Obere Str. 57",
+        "CustomerID": "ALFKI",
+        "CompanyName": "Alfreds Futterkiste",
+        "Country": "Germany",
+        "City": "Berlin",
+        "ContactTitle": "Sales Representative"
+      },
+      {
+        "Phone": "(26) 642-7012",
+        "PostalCode": "01-012",
+        "ContactName": "Zbyszek Piestrzeniewicz",
+        "Fax": "(26) 642-7012",
+        "Address": "ul. Filtrowa 68",
+        "CustomerID": "WOLZA",
+        "CompanyName": "Wolski  Zajazd",
+        "Country": "Poland",
+        "City": "Warszawa",
+        "ContactTitle": "Owner"
+      }
+    ], 
+    
+    "Orders": [
+      {
+        "ShipPostalCode": 51100,
+        "ShippedDate": "1996-07-16",
+        "OrderDate": "1996-07-04",
+        "OrderID": 10248,
+        "Freight": 32.38,
+        "RequiredDate": "1996-08-01",
+        "ShipCity": "Reims",
+        "ShipCountry": "France",
+        "EmployeeID": 5,
+        "ShipVia": 3,
+        "CustomerID": "VINET",
+        "ShipAddress": "59 rue de l'Abbaye",
+        "ShipName": "Vins et alcools Chevalier"
+      },
+      {
+        "ShipPostalCode": 87110,
+        "OrderDate": "1998-05-06",
+        "OrderID": 11077,
+        "Freight": 8.53,
+        "ShipRegion": "NM",
+        "RequiredDate": "1998-06-03",
+        "ShipCity": "Albuquerque",
+        "ShipCountry": "USA",
+        "EmployeeID": 1,
+        "ShipVia": 2,
+        "CustomerID": "RATTC",
+        "ShipAddress": "2817 Milton Dr.",
+        "ShipName": "Rattlesnake Canyon Grocery"
+      }
+    ]
+  },
+  "chartPoints": [
+    {"month": "Jan", "units": 12, "returns": 4},
+    {"month": "Feb", "units": 18, "returns": 7},
+    {"month": "Mar", "units": 9, "returns": 3},
+    {"month": "Apr", "units": 21, "returns": 6}
+  ]
+}

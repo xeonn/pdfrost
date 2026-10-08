@@ -1,0 +1,49 @@
+{
+  "_id": "north:ADJ/AA/2026/01/15/0001",
+  "_rev": "1-sample",
+  "audit": {
+    "created": "2026-01-15T03:26:39.108Z",
+    "createdBy": "user.one@example.com",
+    "updated": "2026-01-15T03:27:22.522Z",
+    "updatedBy": "user.one@example.com"
+  },
+  "description": "TEST DESCRIPTION",
+  "docdate": "2026/01/15",
+  "docid": "north:ADJ/AA/2026/01/15/0001",
+  "docno": "ADJ/AA/2026/01/15/0001",
+  "docstatus": "POSTED",
+  "doctype": "ADJUSTMENT",
+  "itemsList": [
+    {
+      "product": {
+        "id": "SKU-R01",
+        "name": "Sample rice 1kg"
+      },
+      "qty": 20,
+      "rownum": 1,
+      "stockunit": "Ea",
+      "txndate": "2026-01-15T03:27:22Z",
+      "txnid": "north:ADJ/AA/2026/01/15/0001-1"
+    },
+    {
+      "product": {
+        "id": "SKU-R01",
+        "name": "Sample rice 1kg"
+      },
+      "qty": 20,
+      "rownum": 1,
+      "stockunit": "Ea",
+      "txndate": "2026-01-15T03:27:22Z",
+      "txnid": "north:ADJ/AA/2026/01/15/0001-1"
+    }
+  ],
+  "locator": {
+    "id": "DOCK-A-STORAGE",
+    "name": "Dock A - Storage",
+    "orgname": "north",
+    "type": "storage"
+  },
+  "reason": "TEST REASON",
+  "refdoc": "TEST DOC",
+  "title": "TEST TITLE"
+}

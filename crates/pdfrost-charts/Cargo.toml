@@ -1,0 +1,9 @@
+[package]
+name = "pdfrost-charts"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.92"
+description = "JFreeChart-style category charts for pdfrost"
+
+[dependencies]
+skrifa = "0.42"

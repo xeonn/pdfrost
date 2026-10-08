@@ -1,0 +1,62 @@
+{
+  "_id": "doc-1",
+  "_rev": "1-abc",
+  "audit": {
+    "created": "2026-10-01T08:00:00Z",
+    "createdBy": "ada",
+    "updated": "2026-10-02T09:30:00Z",
+    "updatedBy": "ada"
+  },
+  "docdate": "2026-10-01",
+  "docid": "DOC-1",
+  "docno": "0001",
+  "docstatus": "OPEN",
+  "doctype": "INTER_WAREHOUSE",
+  "fromLocator": {
+    "id": "From-id",
+    "name": "From",
+    "orgname": "From Org",
+    "type": "WAREHOUSE"
+  },
+  "toLocator": {
+    "id": "To-id",
+    "name": "To",
+    "orgname": "To Org",
+    "type": "WAREHOUSE"
+  },
+  "reason": {
+    "label": "Rebalance"
+  },
+  "transfertype": "INTERNAL",
+  "vehicleno": "ABC123",
+  "fromodm": "ODM-1",
+  "invno": 42,
+  "itemsList": [
+    {
+      "qty": 1,
+      "receiveqty": 1,
+      "stockunit": "EA",
+      "description": "Line 1",
+      "product": {
+        "id": "SKU-001",
+        "name": "Product 1"
+      },
+      "rownum": 1,
+      "txndate": "2026-10-01",
+      "txnid": "TXN-001"
+    },
+    {
+      "qty": 2,
+      "receiveqty": 2,
+      "stockunit": "EA",
+      "description": "Line 2",
+      "product": {
+        "id": "SKU-002",
+        "name": "Product 2"
+      },
+      "rownum": 2,
+      "txndate": "2026-10-01",
+      "txnid": "TXN-002"
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+    "_id": "central:TRFB/AA/2026/01/15/0001",
+    "_rev": "1-sample",
+    "audit": {
+      "created": "2026-01-15T05:41:37.656Z",
+      "createdBy": "user.one@example.com",
+      "updated": "2026-01-15T05:59:52.982Z",
+      "updatedBy": "user.two@example.com"
+    },
+    "docdate": "2026/01/15",
+    "docid": "central:TRFB/AA/2026/01/15/0001",
+    "docno": "TRFB/AA/2026/01/15/0001",
+    "docstatus": "VOIDED",
+    "doctype": "TRANSFER",
+    "fromLocator": {
+      "id": "DOCK-A-CLEARING",
+      "isdefault": true,
+      "name": "Dock A - Clearing",
+      "orgname": "north",
+      "type": "clearing"
+    },
+    "itemsList": [
+      {
+        "description": "IBT",
+        "product": {
+          "id": "SKU-R50",
+          "name": "Sample rice 50kg"
+        },
+        "qty": 20,
+        "rownum": 1,
+        "stockunit": "Ea"
+      },
+      {
+        "description": "IBT",
+        "product": {
+          "id": "SKU-R01",
+          "name": "Sample rice 1kg"
+        },
+        "qty": 30,
+        "rownum": 2,
+        "stockunit": "Ea"
+      },
+      {
+        "description": "IBT",
+        "product": {
+          "id": "SKU-R10",
+          "name": "Sample rice 10kg"
+        },
+        "qty": 40,
+        "rownum": 3,
+        "stockunit": "Ea"
+      },
+      {
+        "description": "IBT",
+        "product": {
+          "id": "SKU-B50",
+          "name": "Sample grain 50kg"
+        },
+        "qty": 50,
+        "rownum": 4,
+        "stockunit": "Ea"
+      }
+    ],
+    "reason": {},
+    "rejectreason": "TEST REJECT",
+    "toLocator": {
+      "id": "CENTRAL-CLEARING",
+      "name": "Central - Clearing",
+      "orgname": "central",
+      "type": "clearing"
+    },
+    "transfertype": "IBT"
+  }

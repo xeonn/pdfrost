@@ -1,0 +1,465 @@
+{
+  "_id": "doc-1",
+  "_rev": "1-abc",
+  "audit": {
+    "created": "2026-10-01T08:00:00Z",
+    "createdBy": "ada",
+    "updated": "2026-10-02T09:30:00Z",
+    "updatedBy": "ada"
+  },
+  "docdate": "2026-10-01",
+  "docid": "DOC-1",
+  "docno": "0001",
+  "docstatus": "OPEN",
+  "doctype": "SHIPMENT_OUT",
+  "customerName": "Northwind Traders",
+  "invno": 1001,
+  "locator": {
+    "id": "Main-id",
+    "name": "Main",
+    "orgname": "Main Org",
+    "type": "WAREHOUSE"
+  },
+  "itemsList": [
+    {
+      "product": {
+        "id": "SKU-001",
+        "name": "Product 1"
+      },
+      "qty": 1,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-001"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-002",
+        "name": "Product 2"
+      },
+      "qty": 2,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-002"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-003",
+        "name": "Product 3"
+      },
+      "qty": 3,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-003"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-004",
+        "name": "Product 4"
+      },
+      "qty": 4,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-004"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-005",
+        "name": "Product 5"
+      },
+      "qty": 5,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-005"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-006",
+        "name": "Product 6"
+      },
+      "qty": 6,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-006"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-007",
+        "name": "Product 7"
+      },
+      "qty": 7,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-007"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-008",
+        "name": "Product 8"
+      },
+      "qty": 8,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-008"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-009",
+        "name": "Product 9"
+      },
+      "qty": 9,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-009"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-010",
+        "name": "Product 10"
+      },
+      "qty": 10,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-010"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-011",
+        "name": "Product 11"
+      },
+      "qty": 11,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-011"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-012",
+        "name": "Product 12"
+      },
+      "qty": 12,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-012"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-013",
+        "name": "Product 13"
+      },
+      "qty": 13,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-013"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-014",
+        "name": "Product 14"
+      },
+      "qty": 14,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-014"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-015",
+        "name": "Product 15"
+      },
+      "qty": 15,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-015"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-016",
+        "name": "Product 16"
+      },
+      "qty": 16,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-016"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-017",
+        "name": "Product 17"
+      },
+      "qty": 17,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-017"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-018",
+        "name": "Product 18"
+      },
+      "qty": 18,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-018"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-019",
+        "name": "Product 19"
+      },
+      "qty": 19,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-019"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-020",
+        "name": "Product 20"
+      },
+      "qty": 20,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-020"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-021",
+        "name": "Product 21"
+      },
+      "qty": 21,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-021"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-022",
+        "name": "Product 22"
+      },
+      "qty": 22,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-022"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-023",
+        "name": "Product 23"
+      },
+      "qty": 23,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-023"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-024",
+        "name": "Product 24"
+      },
+      "qty": 24,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-024"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-025",
+        "name": "Product 25"
+      },
+      "qty": 25,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-025"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-026",
+        "name": "Product 26"
+      },
+      "qty": 26,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-026"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-027",
+        "name": "Product 27"
+      },
+      "qty": 27,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-027"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-028",
+        "name": "Product 28"
+      },
+      "qty": 28,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-028"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-029",
+        "name": "Product 29"
+      },
+      "qty": 29,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-029"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-030",
+        "name": "Product 30"
+      },
+      "qty": 30,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-030"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-031",
+        "name": "Product 31"
+      },
+      "qty": 31,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-031"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-032",
+        "name": "Product 32"
+      },
+      "qty": 32,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-032"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-033",
+        "name": "Product 33"
+      },
+      "qty": 33,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-033"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-034",
+        "name": "Product 34"
+      },
+      "qty": 34,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-034"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-035",
+        "name": "Product 35"
+      },
+      "qty": 35,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-035"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-036",
+        "name": "Product 36"
+      },
+      "qty": 36,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-036"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-037",
+        "name": "Product 37"
+      },
+      "qty": 37,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-037"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-038",
+        "name": "Product 38"
+      },
+      "qty": 38,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-038"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-039",
+        "name": "Product 39"
+      },
+      "qty": 39,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-039"
+      }
+    },
+    {
+      "product": {
+        "id": "SKU-040",
+        "name": "Product 40"
+      },
+      "qty": 40,
+      "stockunit": "EA",
+      "itemsList": {
+        "product": "SKU-040"
+      }
+    }
+  ]
+}
