@@ -6,13 +6,90 @@
       "orderNo": "SO-1001",
       "lines": [
         { "sku": "BOLT-1", "qty": 4 },
-        { "sku": "NUT-2", "qty": 12 }
+        { "sku": "NUT-2", "qty": 12 },
+        { "sku": "PIN-4", "qty": 30 },
+        { "sku": "CLIP-5", "qty": 16 }
       ]
     },
     {
       "orderNo": "SO-1002",
       "lines": [
-        { "sku": "WASHER-3", "qty": 8 }
+        { "sku": "WASHER-3", "qty": 8 },
+        { "sku": "BOLT-6", "qty": 10 },
+        { "sku": "NUT-7", "qty": 20 },
+        { "sku": "PIN-8", "qty": 14 }
+      ]
+    },
+    {
+      "orderNo": "SO-1003",
+      "lines": [
+        { "sku": "HINGE-9", "qty": 6 },
+        { "sku": "SCREW-10", "qty": 48 },
+        { "sku": "BRACKET-11", "qty": 4 },
+        { "sku": "PLATE-12", "qty": 2 }
+      ]
+    },
+    {
+      "orderNo": "SO-1004",
+      "lines": [
+        { "sku": "ROD-13", "qty": 3 },
+        { "sku": "TUBE-14", "qty": 7 },
+        { "sku": "CAP-15", "qty": 24 },
+        { "sku": "SEAL-16", "qty": 18 }
+      ]
+    },
+    {
+      "orderNo": "SO-1005",
+      "lines": [
+        { "sku": "GEAR-17", "qty": 2 },
+        { "sku": "SHAFT-18", "qty": 5 },
+        { "sku": "BEARING-19", "qty": 8 },
+        { "sku": "KEY-20", "qty": 12 }
+      ]
+    },
+    {
+      "orderNo": "SO-1006",
+      "lines": [
+        { "sku": "SPRING-21", "qty": 15 },
+        { "sku": "WASHER-22", "qty": 40 },
+        { "sku": "BOLT-23", "qty": 22 },
+        { "sku": "NUT-24", "qty": 22 }
+      ]
+    },
+    {
+      "orderNo": "SO-1007",
+      "lines": [
+        { "sku": "CLAMP-25", "qty": 9 },
+        { "sku": "HOOK-26", "qty": 11 },
+        { "sku": "CHAIN-27", "qty": 6 },
+        { "sku": "LINK-28", "qty": 30 }
+      ]
+    },
+    {
+      "orderNo": "SO-1008",
+      "lines": [
+        { "sku": "PULLEY-29", "qty": 2 },
+        { "sku": "BELT-30", "qty": 4 },
+        { "sku": "MOTOR-31", "qty": 1 },
+        { "sku": "GUARD-32", "qty": 3 }
+      ]
+    },
+    {
+      "orderNo": "SO-1009",
+      "lines": [
+        { "sku": "GASKET-33", "qty": 10 },
+        { "sku": "VALVE-34", "qty": 2 },
+        { "sku": "FITTING-35", "qty": 14 },
+        { "sku": "HOSE-36", "qty": 5 }
+      ]
+    },
+    {
+      "orderNo": "SO-1010",
+      "lines": [
+        { "sku": "FILTER-37", "qty": 6 },
+        { "sku": "GAUGE-38", "qty": 1 },
+        { "sku": "COUPLING-39", "qty": 4 },
+        { "sku": "ADAPTER-40", "qty": 8 }
       ]
     }
   ]

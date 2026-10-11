@@ -244,23 +244,19 @@ impl Layout<'_> {
                 continue;
             }
             if let Element::Subreport(subreport) = element {
-                let mut y_shift = float_shift(&subreport.element, &stretches);
+                let y_shift = float_shift(&subreport.element, &stretches);
                 let block = self.embed_subreport(subreport, &fields, document);
                 let content = block.height;
                 let used = content.max(subreport.element.height);
-                let mut top = origin_y + subreport.element.y + y_shift;
-                if self.allow_break
-                    && used > 0.0
-                    && top + used > self.limit() + 0.01
-                    && self.y > self.report.top_margin + 0.01
-                {
-                    self.open_page();
+                let top = origin_y + subreport.element.y + y_shift;
+                let page_before = self.page;
+                self.blit_block(block, left + subreport.element.x, top, true);
+                if self.page != page_before {
                     origin_y = self.y;
                     stretches.clear();
-                    y_shift = 0.0;
-                    top = origin_y + subreport.element.y;
+                    band_bottom = 0.0;
+                    continue;
                 }
-                self.blit_block(block, left + subreport.element.x, top);
                 band_bottom = band_bottom.max(subreport.element.y + y_shift + used);
                 let extra = (content - subreport.element.height).max(0.0);
                 if extra > 0.0 {
@@ -389,6 +385,7 @@ impl Layout<'_> {
                     block,
                     origin_x + subreport.element.x,
                     origin_y + subreport.element.y,
+                    false,
                 );
                 continue;
             }
@@ -582,12 +579,75 @@ impl Layout<'_> {
         }
     }
 
-    fn blit_block(&mut self, block: Block, x: f32, y: f32) {
-        for mut item in block.items {
-            item.placement.x += x;
-            item.placement.y += y;
-            item.placement.page = self.page;
-            self.push(item);
+    fn blit_block(&mut self, block: Block, x: f32, mut y: f32, flow: bool) {
+        if !flow {
+            for mut item in block.items {
+                item.placement.x += x;
+                item.placement.y += y;
+                item.placement.page = self.page;
+                self.push(item);
+            }
+            return;
+        }
+        let mut items = block.items;
+        let mut breaks = block.breaks;
+        let mut height = block.height;
+        for _ in 0..32 {
+            if items.is_empty() {
+                self.y = self.y.max(y);
+                return;
+            }
+            let room = self.limit() - y;
+            if height <= room + 0.01 {
+                for mut item in items {
+                    item.placement.x += x;
+                    item.placement.y += y;
+                    item.placement.page = self.page;
+                    self.push(item);
+                }
+                self.y = self.y.max(y + height);
+                return;
+            }
+            let at_top = y <= self.report.top_margin + 0.5;
+            let cut = next_cut(&items, &breaks, room, at_top);
+            if cut <= 0.5 {
+                self.open_page();
+                y = self.y;
+                continue;
+            }
+            let mut rest = Vec::new();
+            for mut item in items.drain(..) {
+                let top = item.placement.y;
+                let bottom = top + item.placement.height;
+                if bottom <= cut + 0.01 {
+                    item.placement.x += x;
+                    item.placement.y += y;
+                    item.placement.page = self.page;
+                    self.push(item);
+                } else if top + 0.01 >= cut {
+                    item.placement.y -= cut;
+                    rest.push(item);
+                } else {
+                    item.placement.x += x;
+                    item.placement.y += y;
+                    item.placement.page = self.page;
+                    self.push(item);
+                }
+            }
+            items = rest;
+            breaks = breaks
+                .into_iter()
+                .filter_map(|boundary| {
+                    if boundary > cut + 0.01 {
+                        Some(boundary - cut)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            height = (height - cut).max(0.0);
+            self.open_page();
+            y = self.y;
         }
     }
 
@@ -679,6 +739,8 @@ impl Layout<'_> {
 struct Block {
     items: Vec<Drawn>,
     height: f32,
+    /// Y positions, in the block, after each detail record. A page break prefers these.
+    breaks: Vec<f32>,
 }
 
 impl Block {
@@ -686,8 +748,52 @@ impl Block {
         Self {
             items: Vec::new(),
             height: 0.0,
+            breaks: Vec::new(),
         }
     }
+}
+
+/// Largest y within `room` that ends a detail record, else a row that fits.
+fn next_cut(items: &[Drawn], breaks: &[f32], room: f32, at_top: bool) -> f32 {
+    if let Some(cut) = breaks
+        .iter()
+        .copied()
+        .filter(|boundary| *boundary > 0.5 && *boundary <= room + 0.01)
+        .reduce(f32::max)
+    {
+        return cut;
+    }
+    if let Some(cut) = item_cut(items, room) {
+        return cut;
+    }
+    if at_top {
+        return items
+            .iter()
+            .map(|item| item.placement.y + item.placement.height)
+            .filter(|bottom| *bottom > 0.5)
+            .reduce(f32::min)
+            .unwrap_or(0.0);
+    }
+    0.0
+}
+
+fn item_cut(items: &[Drawn], room: f32) -> Option<f32> {
+    let mut best = None;
+    for item in items {
+        let bottom = item.placement.y + item.placement.height;
+        if bottom <= 0.5 || bottom > room + 0.01 {
+            continue;
+        }
+        let straddles = items.iter().any(|other| {
+            let top = other.placement.y;
+            let end = top + other.placement.height;
+            top < bottom - 0.01 && end > bottom + 0.01
+        });
+        if !straddles {
+            best = Some(best.map_or(bottom, |current: f32| current.max(bottom)));
+        }
+    }
+    best
 }
 
 fn stack_report(
@@ -723,10 +829,12 @@ fn stack_report(
         layout.place_kind(kind);
     }
     let details: Vec<Band> = bands(report, BandKind::Detail).cloned().collect();
+    let mut breaks = Vec::new();
     for record in records {
         for band in &details {
             layout.place_flow_data(band, record);
         }
+        breaks.push(layout.y);
     }
     for kind in [
         BandKind::ColumnFooter,
@@ -738,6 +846,7 @@ fn stack_report(
     Block {
         height: layout.y,
         items: layout.pages.into_iter().next().unwrap_or_default(),
+        breaks,
     }
 }
 

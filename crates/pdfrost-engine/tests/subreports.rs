@@ -281,9 +281,28 @@ fn the_sample_fills_orders_from_the_template_directory() {
         "BOLT-1",
         "NUT-2",
         "WASHER-3",
+        "SO-1010",
+        "FILTER-37",
         "SKU",
         "Qty",
     ] {
         assert!(text.contains(label), "missing {label} in {text:?}");
     }
+    assert_eq!(
+        output
+            .placements
+            .iter()
+            .map(|placement| placement.page)
+            .max(),
+        Some(2),
+        "the orders should fill two pages"
+    );
+    assert!(output
+        .placements
+        .iter()
+        .any(|placement| { placement.page == 1 && placement.text.as_deref() == Some("SO-1001") }));
+    assert!(output
+        .placements
+        .iter()
+        .any(|placement| { placement.page == 2 && placement.text.as_deref() == Some("SO-1010") }));
 }
