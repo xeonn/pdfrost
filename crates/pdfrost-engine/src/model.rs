@@ -458,6 +458,19 @@ pub struct Chart {
     pub series: Vec<CategorySeries>,
 }
 
+/// Another `.jrxml` filled into this box.
+///
+/// `expression` is the raw `subreportExpression`. `data_source` is the path
+/// inside `subDataSource("…")`. `None` fills the current JSON object once.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Subreport {
+    pub element: ReportElement,
+    pub expression: String,
+    #[serde(default)]
+    pub data_source: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Table {
@@ -505,6 +518,7 @@ pub enum Element {
     Image(Image),
     Break(PageBreak),
     Chart(Chart),
+    Subreport(Subreport),
     Table(Table),
 }
 
@@ -519,6 +533,7 @@ impl Element {
             Element::Image(image) => &image.element,
             Element::Break(page_break) => &page_break.element,
             Element::Chart(chart) => &chart.element,
+            Element::Subreport(subreport) => &subreport.element,
             Element::Table(table) => &table.element,
         }
     }

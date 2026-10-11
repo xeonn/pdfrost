@@ -100,7 +100,28 @@ async function chooseTemplate(): Promise<void> {
   await render();
 }
 
-async function chooseDocument(): Promise<void> {
+async function openTemplate(path: string): Promise<void> {
+  if (!path || path === templatePath.value) {
+    return;
+  }
+  if (
+    sourceRef.value &&
+    !sourceRef.value.confirmDiscardIfDirty("Discard unsaved Source changes and open the subreport?")
+  ) {
+    return;
+  }
+  if (
+    designRef.value &&
+    !designRef.value.confirmDiscardIfDirty("Discard unsaved Design changes and open the subreport?")
+  ) {
+    return;
+  }
+  templatePath.value = path;
+  mode.value = "design";
+  await render();
+}
+
+async function chooseDocument(stayOnDesign?: boolean): Promise<void> {
   if (!templatePath.value) {
     return;
   }
@@ -109,7 +130,9 @@ async function chooseDocument(): Promise<void> {
     return;
   }
   documentPath.value = picked;
-  mode.value = "preview";
+  if (stayOnDesign !== true) {
+    mode.value = "preview";
+  }
   await render();
 }
 
@@ -599,10 +622,13 @@ onMounted(() => {
           ref="designRef"
           v-show="mode === 'design'"
           :template-path="templatePath"
+          :document-path="documentPath"
           :active="mode === 'design'"
           class="min-h-0 flex-1"
           @saved="onDesignSaved"
           @create="createReport"
+          @open-template="openTemplate"
+          @pick-document="chooseDocument(true)"
         />
         <Source
           ref="sourceRef"

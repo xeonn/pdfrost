@@ -1,0 +1,19 @@
+{
+  "company": "Northwind Traders",
+  "contact": "Maria Anders",
+  "orders": [
+    {
+      "orderNo": "SO-1001",
+      "lines": [
+        { "sku": "BOLT-1", "qty": 4 },
+        { "sku": "NUT-2", "qty": 12 }
+      ]
+    },
+    {
+      "orderNo": "SO-1002",
+      "lines": [
+        { "sku": "WASHER-3", "qty": 8 }
+      ]
+    }
+  ]
+}

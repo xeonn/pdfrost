@@ -145,6 +145,12 @@ export type Element =
       series?: CategorySeries[];
     }
   | {
+      type: "subreport";
+      element: ReportElement;
+      expression: string;
+      dataSource?: string | null;
+    }
+  | {
       type: "table";
       element: ReportElement;
       whenNoData: string | null;
@@ -228,7 +234,7 @@ export const BAND_LABEL: Record<BandKind, string> = {
   background: "Background",
 };
 
-export type Tool = "staticText" | "textField" | "image" | "line" | "rectangle" | "table" | "chart";
+export type Tool = "staticText" | "textField" | "image" | "line" | "rectangle" | "table" | "chart" | "subreport";
 
 export const CHART_KINDS: { id: string; label: string }[] = [
   { id: "barChart", label: "Bar" },
@@ -302,6 +308,8 @@ export function elementLabel(element: Element): string {
       return "Break";
     case "chart":
       return element.kind || "Chart";
+    case "subreport":
+      return element.expression.replace(/^"|"$/g, "") || "Subreport";
     case "table":
       return "Table";
   }
@@ -774,6 +782,13 @@ function createElement(report: Report, tool: Tool, x: number, y: number): Elemen
         series: [
           { seriesExpression: '"SERIES 1"', categoryExpression: "0", valueExpression: "0" },
         ],
+      };
+    case "subreport":
+      return {
+        type: "subreport",
+        element: frame(x, y, Math.max(40, report.columnWidth || 200), 40),
+        expression: "",
+        dataSource: null,
       };
     case "table":
       return newTable(report, x, y);

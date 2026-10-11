@@ -10,6 +10,7 @@ mod fill;
 mod image;
 mod model;
 mod parse;
+mod subreport;
 mod write;
 
 use std::path::Path;

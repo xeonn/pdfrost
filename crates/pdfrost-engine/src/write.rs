@@ -137,6 +137,7 @@ fn write_element(xml: &mut String, element: &Element, indent: usize) {
         Element::Image(image) => write_image(xml, indent, image),
         Element::Break(page_break) => write_break(xml, indent, page_break),
         Element::Chart(chart) => write_chart(xml, indent, chart),
+        Element::Subreport(subreport) => write_subreport(xml, indent, subreport),
         Element::Table(table) => write_table(xml, indent, table),
     }
 }
@@ -296,6 +297,30 @@ fn write_break(xml: &mut String, indent: usize, page_break: &PageBreak) {
     let _ = writeln!(xml, "{pad}<break type=\"{kind}\">");
     write_report_element(xml, &page_break.element, indent + 1);
     let _ = writeln!(xml, "{pad}</break>");
+}
+
+fn write_subreport(xml: &mut String, indent: usize, subreport: &Subreport) {
+    let pad = "\t".repeat(indent);
+    let _ = writeln!(xml, "{pad}<subreport>");
+    write_report_element(xml, &subreport.element, indent + 1);
+    if let Some(borders) = &subreport.element.borders {
+        write_box(xml, borders, indent + 1);
+    }
+    if let Some(source) = &subreport.data_source {
+        let _ = writeln!(
+            xml,
+            "{pad}\t<dataSourceExpression>subDataSource(\"{}\")</dataSourceExpression>",
+            escape(source)
+        );
+    }
+    if !subreport.expression.is_empty() {
+        let _ = writeln!(
+            xml,
+            "{pad}\t<subreportExpression>{}</subreportExpression>",
+            escape(&subreport.expression)
+        );
+    }
+    let _ = writeln!(xml, "{pad}</subreport>");
 }
 
 fn write_image(xml: &mut String, indent: usize, image: &Image) {

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { FwbButton, FwbButtonGroup, FwbP } from "flowbite-vue";
 import Icon from "./Icon.vue";
+import JsonTree from "./JsonTree.vue";
 import {
   BAND_LABEL,
   BAND_CANVAS,
+  blankReport,
   CHART_KINDS,
   SECTION_LABEL,
   type SectionKind,
@@ -53,8 +55,8 @@ import {
   type Warning,
 } from "./report";
 
-const props = defineProps<{ templatePath: string; active?: boolean }>();
-const emit = defineEmits<{ saved: [path: string]; create: [] }>();
+const props = defineProps<{ templatePath: string; documentPath?: string; active?: boolean }>();
+const emit = defineEmits<{ saved: [path: string]; create: []; openTemplate: [path: string]; pickDocument: [] }>();
 
 type Selection =
   | { kind: "report" }
@@ -113,15 +115,18 @@ let imagePreviewTicket = 0;
 const undoStack = ref<string[]>([]);
 const editing = ref<{ band: number; index: number } | null>(null);
 const textDraft = ref("");
-const palette: { id: Tool; label: string; icon: "type" | "field" | "image" | "minus" | "square" | "table" | "chart" }[] = [
+const palette: { id: Tool; label: string; icon: "type" | "field" | "image" | "minus" | "square" | "table" | "chart" | "subreport" }[] = [
   { id: "staticText", label: "Static Text", icon: "type" },
   { id: "textField", label: "Text Field", icon: "field" },
   { id: "image", label: "Image", icon: "image" },
   { id: "line", label: "Line", icon: "minus" },
   { id: "rectangle", label: "Rectangle", icon: "square" },
   { id: "chart", label: "Chart", icon: "chart" },
+  { id: "subreport", label: "Subreport", icon: "subreport" },
   { id: "table", label: "Table", icon: "table" },
 ];
+const jsonDocument = ref<unknown>(null);
+const jsonError = ref("");
 let generation = 0;
 let drag: Drag | null = null;
 let panelDrag: { side: "outline" | "inspector"; startX: number; startWidth: number } | null = null;
@@ -1001,6 +1006,114 @@ function chartKindLabel(kind: string): string {
   return CHART_KINDS.find((item) => item.id === kind)?.label ?? kind;
 }
 
+async function loadJson(path: string): Promise<void> {
+  jsonDocument.value = null;
+  jsonError.value = "";
+  if (!path) {
+    return;
+  }
+  try {
+    const text = await invoke<string>("read_template", { path });
+    jsonDocument.value = JSON.parse(text) as unknown;
+  } catch (err) {
+    jsonError.value = message(err);
+  }
+}
+
+function directoryOf(file: string): string {
+  const index = Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\"));
+  return index >= 0 ? file.slice(0, index) : "";
+}
+
+function joinPath(dir: string, rel: string): string {
+  if (!rel || rel.startsWith("/") || /^[A-Za-z]:[\\/]/.test(rel)) {
+    return rel;
+  }
+  const slash = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
+  const parts = `${dir}${slash}${rel}`.split(/[/\\]/);
+  const stack: string[] = [];
+  for (const part of parts) {
+    if (!part || part === ".") {
+      continue;
+    }
+    if (part === "..") {
+      stack.pop();
+    } else {
+      stack.push(part);
+    }
+  }
+  return `${dir.startsWith("/") ? "/" : ""}${stack.join(slash)}`;
+}
+
+function relativePath(fromDir: string, target: string): string {
+  const slash = fromDir.includes("\\") && !fromDir.includes("/") ? "\\" : "/";
+  const from = fromDir.split(/[/\\]/).filter(Boolean);
+  const to = target.split(/[/\\]/).filter(Boolean);
+  let shared = 0;
+  while (shared < from.length && shared < to.length && from[shared] === to[shared]) {
+    shared += 1;
+  }
+  return [...from.slice(shared).map(() => ".."), ...to.slice(shared)].join(slash) || target;
+}
+
+function subreportPathText(expression: string): string {
+  const trimmed = expression.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
+    return trimmed.slice(1, -1).replace(/\\"/g, '"');
+  }
+  return trimmed;
+}
+
+function setSubreportSource(path: string): void {
+  edit(() => {
+    if (editedElement.value?.type === "subreport") {
+      editedElement.value.dataSource = path.trim() || null;
+    }
+  });
+}
+
+async function browseSubreport(): Promise<void> {
+  const picked = await open({ multiple: false, filters: [{ name: "JRXML", extensions: ["jrxml"] }] });
+  if (typeof picked !== "string") {
+    return;
+  }
+  const relative = props.templatePath ? relativePath(directoryOf(props.templatePath), picked) : picked;
+  edit(() => {
+    if (editedElement.value?.type === "subreport") {
+      editedElement.value.expression = chartExpression(relative);
+    }
+  });
+}
+
+async function createSubreport(): Promise<void> {
+  const suggested = props.templatePath ? joinPath(directoryOf(props.templatePath), "subreport.jrxml") : "subreport.jrxml";
+  const picked = await save({ defaultPath: suggested, filters: [{ name: "JRXML", extensions: ["jrxml"] }] });
+  if (typeof picked !== "string") {
+    return;
+  }
+  try {
+    await invoke("save_report", { path: picked, report: blankReport() });
+  } catch (err) {
+    error.value = message(err);
+    return;
+  }
+  const relative = props.templatePath ? relativePath(directoryOf(props.templatePath), picked) : picked;
+  edit(() => {
+    if (editedElement.value?.type === "subreport") {
+      editedElement.value.expression = chartExpression(relative);
+    }
+  });
+}
+
+function openSubreport(expression: string): void {
+  const text = subreportPathText(expression);
+  if (!text || !props.templatePath) {
+    return;
+  }
+  const file = text.endsWith(".jasper") ? `${text.slice(0, -".jasper".length)}.jrxml` : text;
+  emit("openTemplate", joinPath(directoryOf(props.templatePath), file));
+}
+
 function setChartExpression(
   chart: Extract<Element, { type: "chart" }>,
   series: CategorySeries,
@@ -1743,6 +1856,14 @@ watch(
   },
 );
 
+watch(
+  () => props.documentPath,
+  (path) => {
+    void loadJson(path ?? "");
+  },
+  { immediate: true },
+);
+
 watch(editing, async (value) => {
   if (!value) {
     return;
@@ -2262,6 +2383,12 @@ onBeforeUnmount(() => {
                     <span v-if="element.title" class="mt-0.5 text-[10px] text-slate-500">{{ element.title }}</span>
                   </div>
                 </template>
+                <template v-else-if="element.type === 'subreport'">
+                  <div class="flex h-full flex-col items-center justify-center bg-slate-100 px-1 text-center text-[10px] leading-tight text-slate-600">
+                    <span>Subreport</span>
+                    <span class="mt-0.5 max-w-full truncate text-slate-500">{{ subreportPathText(element.expression) || "No file" }}</span>
+                  </div>
+                </template>
                 <template v-else-if="element.type === 'image'">
                   <img
                     v-if="imagePreview(element)"
@@ -2694,6 +2821,50 @@ onBeforeUnmount(() => {
                 </label>
               </div>
               <FwbButton size="xs" @click="edit(() => { if (editedElement?.type === 'chart') addChartSeries(editedElement); })">Add series</FwbButton>
+            </template>
+
+            <template v-if="editedElement.type === 'subreport'">
+              <label class="block text-xs text-gray-400">
+                Report file
+                <input
+                  :class="inputClass"
+                  :value="editedElement.expression"
+                  placeholder='"section.jrxml"'
+                  @change="edit(() => { if (editedElement?.type === 'subreport') editedElement.expression = chartExpression(($event.target as HTMLInputElement).value); })"
+                />
+              </label>
+              <div class="flex flex-wrap gap-2">
+                <FwbButton size="xs" @click="browseSubreport">Browse</FwbButton>
+                <FwbButton size="xs" @click="createSubreport">New</FwbButton>
+                <FwbButton size="xs" :disabled="!editedElement.expression" @click="openSubreport(editedElement.expression)">Open</FwbButton>
+              </div>
+              <label class="block text-xs text-gray-400">
+                Data path
+                <input
+                  :class="inputClass"
+                  :value="editedElement.dataSource ?? ''"
+                  placeholder="orders"
+                  @change="setSubreportSource(($event.target as HTMLInputElement).value)"
+                />
+              </label>
+              <p class="text-xs text-gray-500">
+                Leave the path empty to fill the other file once from the current JSON object. A path such as customer.orders repeats its detail band, one object per element.
+              </p>
+              <FwbButton size="xs" color="alternative" @click="setSubreportSource('')">Use this object</FwbButton>
+              <div class="space-y-2 rounded-md border border-slate-800 p-2">
+                <div class="flex items-center justify-between text-xs text-gray-400">
+                  JSON
+                  <FwbButton size="xs" color="alternative" @click="emit('pickDocument')">Open JSON</FwbButton>
+                </div>
+                <p v-if="jsonError" class="text-xs text-amber-400">{{ jsonError }}</p>
+                <p v-else-if="jsonDocument === null" class="text-xs text-gray-500">Open a JSON document to pick an array or object.</p>
+                <JsonTree
+                  v-else
+                  :value="jsonDocument"
+                  :selected="editedElement.dataSource ?? ''"
+                  @select="setSubreportSource"
+                />
+              </div>
             </template>
 
             <template v-if="editedElement.type === 'image'">

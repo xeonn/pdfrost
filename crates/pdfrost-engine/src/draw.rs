@@ -3,7 +3,7 @@
 //! A table grows with its rows. Rows that do not fit move to the next page, and that
 //! page repeats the table's column header. `$F` inside a table reads the current row.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use krilla::color::rgb;
@@ -99,6 +99,8 @@ fn layout(
         pages: Vec::new(),
         page: 0,
         y: 0.0,
+        allow_break: true,
+        stack: Vec::new(),
     };
     layout.open_page();
     layout.place_kind(BandKind::Title);
@@ -122,6 +124,11 @@ struct Layout<'a> {
     pages: Vec<Vec<Drawn>>,
     page: u32,
     y: f32,
+    /// When false, bands stack in one column. A subreport uses this so its
+    /// pages are not pinned to their own paper.
+    allow_break: bool,
+    /// Canonical paths of subreports already being filled.
+    stack: Vec<PathBuf>,
 }
 
 impl Layout<'_> {
@@ -163,6 +170,9 @@ impl Layout<'_> {
     }
 
     fn ensure(&mut self, height: f32) {
+        if !self.allow_break {
+            return;
+        }
         if self.page == 0 {
             self.open_page();
         }
@@ -202,11 +212,15 @@ impl Layout<'_> {
     }
 
     fn place_flow(&mut self, band: &Band) {
+        let document = self.document.clone();
+        self.place_flow_data(band, &document);
+    }
+
+    fn place_flow_data(&mut self, band: &Band, document: &Value) {
         self.ensure(band.height);
         let band_top = self.y;
         let start_page = self.page;
         let fields = self.report.fields.clone();
-        let document = self.document.clone();
         let left = self.report.left_margin;
         let mut origin_y = band_top;
         let mut stretches: Vec<(f32, f32)> = Vec::new();
@@ -216,14 +230,41 @@ impl Layout<'_> {
                 continue;
             }
             if let Element::Break(_) = element {
-                if matches!(
-                    band.kind,
-                    BandKind::Title | BandKind::Detail | BandKind::Summary
-                ) {
+                if self.allow_break
+                    && matches!(
+                        band.kind,
+                        BandKind::Title | BandKind::Detail | BandKind::Summary
+                    )
+                {
                     self.open_page();
                     origin_y = self.y;
                     stretches.clear();
                     band_bottom = band.height;
+                }
+                continue;
+            }
+            if let Element::Subreport(subreport) = element {
+                let mut y_shift = float_shift(&subreport.element, &stretches);
+                let block = self.embed_subreport(subreport, &fields, document);
+                let content = block.height;
+                let used = content.max(subreport.element.height);
+                let mut top = origin_y + subreport.element.y + y_shift;
+                if self.allow_break
+                    && used > 0.0
+                    && top + used > self.limit() + 0.01
+                    && self.y > self.report.top_margin + 0.01
+                {
+                    self.open_page();
+                    origin_y = self.y;
+                    stretches.clear();
+                    y_shift = 0.0;
+                    top = origin_y + subreport.element.y;
+                }
+                self.blit_block(block, left + subreport.element.x, top);
+                band_bottom = band_bottom.max(subreport.element.y + y_shift + used);
+                let extra = (content - subreport.element.height).max(0.0);
+                if extra > 0.0 {
+                    stretches.push((subreport.element.y + subreport.element.height, extra));
                 }
                 continue;
             }
@@ -245,7 +286,7 @@ impl Layout<'_> {
             }
             let y_shift = float_shift(&table.element, &stretches);
             self.y = self.y.max(band_top + table.element.y + y_shift);
-            self.place_table(table);
+            self.place_table(table, document);
             band_bottom = band_bottom.max(self.y - band_top);
         }
         if self.page == start_page {
@@ -255,10 +296,10 @@ impl Layout<'_> {
         }
     }
 
-    fn place_table(&mut self, table: &Table) {
+    fn place_table(&mut self, table: &Table, data: &Value) {
         let abs_x = self.report.left_margin + table.element.x;
         let fields = dataset_fields(self.report, table.sub_dataset.as_deref()).to_vec();
-        let rows: Vec<Value> = table_rows(self.document, table.data_source.as_deref())
+        let rows: Vec<Value> = table_rows(data, table.data_source.as_deref())
             .into_iter()
             .cloned()
             .collect();
@@ -266,7 +307,7 @@ impl Layout<'_> {
         self.place_table_section(table, abs_x, SectionKind::ColumnHeader, None, &fields);
         let row_height = section_height(table, SectionKind::DetailCell).unwrap_or(0.0);
         for row in &rows {
-            if row_height > 0.0 && self.y + row_height > self.limit() + 0.01 {
+            if self.allow_break && row_height > 0.0 && self.y + row_height > self.limit() + 0.01 {
                 self.open_page();
                 self.place_table_section(table, abs_x, SectionKind::ColumnHeader, None, &fields);
             }
@@ -342,6 +383,15 @@ impl Layout<'_> {
         data: &Value,
     ) {
         for element in &band.elements {
+            if let Element::Subreport(subreport) = element {
+                let block = self.embed_subreport(subreport, fields, data);
+                self.blit_block(
+                    block,
+                    origin_x + subreport.element.x,
+                    origin_y + subreport.element.y,
+                );
+                continue;
+            }
             if matches!(element, Element::Table(_)) {
                 continue;
             }
@@ -438,6 +488,7 @@ impl Layout<'_> {
                 extra
             }
             Element::Break(_) => 0.0,
+            Element::Subreport(_) => 0.0,
             Element::Chart(chart) => {
                 let plot = crate::chart::prepare(
                     chart,
@@ -529,6 +580,164 @@ impl Layout<'_> {
         if let Some(page) = self.pages.last_mut() {
             page.push(drawn);
         }
+    }
+
+    fn blit_block(&mut self, block: Block, x: f32, y: f32) {
+        for mut item in block.items {
+            item.placement.x += x;
+            item.placement.y += y;
+            item.placement.page = self.page;
+            self.push(item);
+        }
+    }
+
+    fn embed_subreport(&mut self, sub: &Subreport, fields: &[Field], data: &Value) -> Block {
+        if self.stack.len() >= 8 {
+            self.warnings.push(Warning {
+                tag: "subreport".to_string(),
+                location: "nested".to_string(),
+            });
+            return Block::empty();
+        }
+        let Some(source) =
+            crate::subreport::expression_path(&sub.expression, fields, data, self.warnings)
+        else {
+            return Block::empty();
+        };
+        let Some(path) = crate::subreport::locate(&source, self.asset_dir, self.warnings) else {
+            return Block::empty();
+        };
+        let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+        if self.stack.iter().any(|item| item == &canonical) {
+            self.warnings.push(Warning {
+                tag: "subreport cycle".to_string(),
+                location: source,
+            });
+            return Block::empty();
+        }
+        let xml = match std::fs::read_to_string(&path) {
+            Ok(xml) => xml,
+            Err(_) => {
+                self.warnings.push(Warning {
+                    tag: format!("subreport {source}"),
+                    location: "subreport".to_string(),
+                });
+                return Block::empty();
+            }
+        };
+        let mut child = match crate::parse(&xml) {
+            Ok(report) => report,
+            Err(err) => {
+                self.warnings.push(Warning {
+                    tag: format!("subreport {err}"),
+                    location: "subreport".to_string(),
+                });
+                return Block::empty();
+            }
+        };
+        for warning in child.warnings.drain(..) {
+            self.warnings.push(Warning {
+                tag: warning.tag,
+                location: format!("subreport {}", warning.location),
+            });
+        }
+        let records = match crate::subreport::records(data, sub.data_source.as_deref()) {
+            Ok(records) => records,
+            Err(()) => {
+                let path = sub.data_source.as_deref().unwrap_or("");
+                self.warnings.push(Warning {
+                    tag: format!("subreport {path}"),
+                    location: "dataSourceExpression".to_string(),
+                });
+                return Block::empty();
+            }
+        };
+        if records.is_empty() {
+            return Block::empty();
+        }
+        child.left_margin = 0.0;
+        child.right_margin = 0.0;
+        child.top_margin = 0.0;
+        child.bottom_margin = 0.0;
+        child.page_width = sub.element.width.max(1.0);
+        child.page_height = 1_000_000.0;
+        let mut stack = self.stack.clone();
+        stack.push(canonical);
+        let child_dir = path.parent().map(|dir| dir.to_path_buf());
+        stack_report(
+            &child,
+            &records,
+            self.rendered_at,
+            child_dir.as_deref(),
+            self.warnings,
+            stack,
+            self.page,
+        )
+    }
+}
+
+struct Block {
+    items: Vec<Drawn>,
+    height: f32,
+}
+
+impl Block {
+    fn empty() -> Self {
+        Self {
+            items: Vec::new(),
+            height: 0.0,
+        }
+    }
+}
+
+fn stack_report(
+    report: &Report,
+    records: &[Value],
+    rendered_at: DateTime<Utc>,
+    asset_dir: Option<&Path>,
+    warnings: &mut Vec<Warning>,
+    stack: Vec<PathBuf>,
+    page: u32,
+) -> Block {
+    let Some(first) = records.first() else {
+        return Block::empty();
+    };
+    let mut layout = Layout {
+        report,
+        document: first,
+        rendered_at,
+        asset_dir,
+        warnings,
+        pages: vec![Vec::new()],
+        page: page.max(1),
+        y: 0.0,
+        allow_break: false,
+        stack,
+    };
+    for kind in [
+        BandKind::Background,
+        BandKind::Title,
+        BandKind::PageHeader,
+        BandKind::ColumnHeader,
+    ] {
+        layout.place_kind(kind);
+    }
+    let details: Vec<Band> = bands(report, BandKind::Detail).cloned().collect();
+    for record in records {
+        for band in &details {
+            layout.place_flow_data(band, record);
+        }
+    }
+    for kind in [
+        BandKind::ColumnFooter,
+        BandKind::PageFooter,
+        BandKind::Summary,
+    ] {
+        layout.place_kind(kind);
+    }
+    Block {
+        height: layout.y,
+        items: layout.pages.into_iter().next().unwrap_or_default(),
     }
 }
 

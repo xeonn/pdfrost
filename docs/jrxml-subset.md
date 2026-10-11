@@ -32,13 +32,14 @@ A tag that appears in none of these lists is unsupported.
 | `image`, `imageExpression` | A PNG or JPEG in the element box. The expression is a quoted path or `$F{name}`. A path is read beside the template, then from the process directory. `scaleImage`, `hAlign`, `vAlign`, `rotation`, `isUsingCache`, `isLazy`, `onErrorType`, `evaluationTime`, and `evaluationGroup` are kept. A missing picture warns when `onErrorType` is `Error`, draws nothing when it is `Blank`, and draws a small mark when it is `Icon`. Hyperlinks on the image are warned and omitted. |
 | `elementGroup` | Children are laid out on the parent band. The group itself has no box. |
 | `break` | `type="Page"` or `type="Column"`. In `title`, `detail`, or `summary`, either starts the next page and later elements in that band use the new page. In a header, footer, or `background`, the tag is kept and does not split the page. |
+| `subreport`, `subreportExpression` | Another `.jrxml`, filled into the element box. The expression is a quoted path or `$F{name}`, read beside the master the way an image path is. A `.jasper` path reads the `.jrxml` with the same stem and warns. The band grows with the filled result. The whole block moves to the next page when it does not fit. With no data source, the file is filled once from the current JSON object. `subDataSource("…")` repeats the child's detail band over that array. A table or chart inside the child reads the current element of that array. `connectionExpression`, `subreportParameter`, and `returnValue` warn and are skipped. `Subreport.jrxml` fills `company` and `contact` from `SubreportData.json` and repeats `OrderLines.jrxml` over `orders`. Each order prints `orderNo` and a table of that object's `lines`. |
 | `areaChart`, `barChart`, `lineChart`, `stackedAreaChart`, `stackedBarChart` | A category plot in the element box. See [Charts](charts.md). |
 | `subDataset` | The record shape a table repeats. |
 | `componentElement` | Wrapper around a table. |
 | `jr:table`, `jr:column` | The table and one column. |
 | `jr:tableHeader`, `jr:columnHeader`, `jr:detailCell`, `jr:columnFooter`, `jr:tableFooter` | Table sections used by the samples. |
 | `datasetRun` | Binds the table to a `subDataset`. |
-| `dataSourceExpression` | Only `subDataSource("…")`. The string names a JSON array on the document. The operational templates use `itemsList`. |
+| `dataSourceExpression` | Only `subDataSource("…")`. On a table or chart the string names a JSON array on the current object. The operational templates use `itemsList`. On a subreport the same call is a path: `orders`, or `customer.orders`. A numeric segment indexes an array. |
 
 ## Supported expressions
 
@@ -92,7 +93,6 @@ A tag in none of the tables in this document is unsupported. The render continue
 | Tag | Result |
 | --- | --- |
 | `frame` | Omitted, including the elements inside it. |
-| `subreport` | Omitted. |
 | `crosstab` | Omitted. |
 | `genericElement` | Omitted. |
 | `printWhenExpression` | The element is still drawn. |

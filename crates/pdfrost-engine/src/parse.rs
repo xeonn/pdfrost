@@ -59,6 +59,8 @@ const KNOWN: &[&str] = &[
     "tableFooter",
     "datasetRun",
     "dataSourceExpression",
+    "subreport",
+    "subreportExpression",
 ];
 
 /// Parse `template_xml`. Unreadable XML, or a root that is not `jasperReport`, is an error.
@@ -418,6 +420,11 @@ impl Parser {
                 name if is_chart_tag(name) => {
                     elements.push(Element::Chart(self.parse_chart(child, &child_location)));
                 }
+                "subreport" => {
+                    elements.push(Element::Subreport(
+                        self.parse_subreport(child, &child_location),
+                    ));
+                }
                 "componentElement" => {
                     if let Some(table) = self.parse_component(child, &child_location) {
                         elements.push(Element::Table(table));
@@ -433,6 +440,57 @@ impl Parser {
             }
         }
         elements
+    }
+
+    fn parse_subreport(&mut self, node: Node<'_, '_>, location: &str) -> Subreport {
+        let mut element = ReportElement::default();
+        let mut expression = String::new();
+        let mut data_source = None;
+        let mut saw_frame = false;
+        for child in element_children(node) {
+            let name = child.tag_name().name();
+            let child_location = join(location, name);
+            match name {
+                "reportElement" if !saw_frame => {
+                    element = self.parse_report_element(child, &child_location);
+                    saw_frame = true;
+                }
+                "box" => element.borders = Some(self.parse_box(child, &child_location)),
+                "subreportExpression" => expression = element_text(child),
+                "dataSourceExpression" => {
+                    let text = element_text(child);
+                    if let Some(source) = sub_data_source(&text) {
+                        data_source = Some(source);
+                    } else if !text.is_empty() && !bare_sub_data_source(&text) {
+                        self.warn(&text, &child_location);
+                    }
+                }
+                "connectionExpression"
+                | "subreportParameter"
+                | "returnValue"
+                | "parametersMapExpression" => {
+                    self.warn(name, &child_location);
+                }
+                "property" => {
+                    self.note_property(child, &child_location);
+                }
+                other => {
+                    self.warn(other, &child_location);
+                    self.collect_unknown(child, &child_location);
+                }
+            }
+        }
+        if !expression.is_empty() {
+            match Expression::parse(&expression) {
+                Expression::Text(_) | Expression::Field(_) => {}
+                _ => self.warn(&expression, location),
+            }
+        }
+        Subreport {
+            element,
+            expression,
+            data_source,
+        }
     }
 
     fn parse_static_text(&mut self, node: Node<'_, '_>, location: &str) -> StaticText {
@@ -1159,6 +1217,13 @@ fn section_kind(name: &str) -> Option<SectionKind> {
         "tableFooter" => SectionKind::TableFooter,
         _ => return None,
     })
+}
+
+fn bare_sub_data_source(expression: &str) -> bool {
+    let Some(start) = expression.find("subDataSource") else {
+        return false;
+    };
+    expression[start + "subDataSource".len()..].trim() == "()"
 }
 
 fn sub_data_source(expression: &str) -> Option<String> {
