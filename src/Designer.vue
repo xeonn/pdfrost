@@ -2244,22 +2244,23 @@ onBeforeUnmount(() => {
           title="Resize palette and properties"
           @pointerdown.stop="onPanelResizeDown($event, 'inspector')"
         />
-        <div class="grid shrink-0 grid-cols-1 gap-1 p-2">
+        <div class="grid shrink-0 grid-cols-[repeat(auto-fill,minmax(4.5rem,1fr))] gap-1 p-2">
           <button
             v-for="item in palette"
             :key="item.id"
             type="button"
-            class="flex cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm active:cursor-grabbing"
+            class="flex cursor-grab flex-col items-center gap-1 rounded-md border px-1 py-2 text-center text-[10px] leading-tight active:cursor-grabbing"
             :class="
               tool === item.id
                 ? 'border-blue-500 bg-blue-600/20 text-white'
                 : 'border-slate-800 bg-slate-900 text-gray-200 hover:bg-slate-800'
             "
+            :title="item.label"
             draggable="true"
             @dragstart="onToolDragStart($event, item.id)"
             @click="tool = tool === item.id ? null : item.id"
           >
-            <Icon :name="item.icon" class="text-blue-400" />
+            <Icon :name="item.icon" size="lg" class="text-blue-300" />
             {{ item.label }}
           </button>
         </div>

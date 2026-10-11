@@ -1,6 +1,7 @@
 <script setup lang="ts">
 withDefaults(
   defineProps<{
+    size?: "sm" | "lg";
     name:
       | "folder"
       | "file"
@@ -21,7 +22,7 @@ withDefaults(
       | "refresh"
       | "print";
   }>(),
-  {},
+  { size: "sm" },
 );
 </script>
 
@@ -32,7 +33,8 @@ withDefaults(
     viewBox="0 0 24 24"
     stroke-width="1.5"
     stroke="currentColor"
-    class="h-4 w-4 shrink-0"
+    class="shrink-0"
+    :class="size === 'lg' ? 'h-6 w-6' : 'h-4 w-4'"
     aria-hidden="true"
   >
     <path
