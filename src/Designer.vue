@@ -7,14 +7,18 @@ import Icon from "./Icon.vue";
 import {
   BAND_LABEL,
   BAND_ORDER,
+  CHART_KINDS,
   SECTION_LABEL,
   type SectionKind,
   addColumn,
   addDatasetField,
   addMainField,
   applyResize,
+  bindChartSource,
   borderColor,
   borderWidth,
+  chartChoices,
+  chartExpression,
   clampElement,
   colorFromHex,
   contentBottom,
@@ -26,6 +30,7 @@ import {
   placeElement,
   placeField,
   plotsChart,
+  rememberChartFields,
   removeColumn,
   sectionByKind,
   setBorderColor,
@@ -37,6 +42,7 @@ import {
   syncTableBox,
   tableSectionKinds,
   type BandKind,
+  type CategorySeries,
   type ColumnSection,
   type Element,
   type Handle,
@@ -104,12 +110,13 @@ let imagePreviewTicket = 0;
 const undoStack = ref<string[]>([]);
 const editing = ref<{ band: number; index: number } | null>(null);
 const textDraft = ref("");
-const palette: { id: Tool; label: string; icon: "type" | "field" | "image" | "minus" | "square" | "table" }[] = [
+const palette: { id: Tool; label: string; icon: "type" | "field" | "image" | "minus" | "square" | "table" | "chart" }[] = [
   { id: "staticText", label: "Static Text", icon: "type" },
   { id: "textField", label: "Text Field", icon: "field" },
   { id: "image", label: "Image", icon: "image" },
   { id: "line", label: "Line", icon: "minus" },
   { id: "rectangle", label: "Rectangle", icon: "square" },
+  { id: "chart", label: "Chart", icon: "chart" },
   { id: "table", label: "Table", icon: "table" },
 ];
 let generation = 0;
@@ -936,6 +943,34 @@ function commitText(): void {
 
 function sectionLabel(kind: SectionKind): string {
   return SECTION_LABEL[kind];
+}
+
+function chartKindLabel(kind: string): string {
+  return CHART_KINDS.find((item) => item.id === kind)?.label ?? kind;
+}
+
+function setChartExpression(
+  chart: Extract<Element, { type: "chart" }>,
+  series: CategorySeries,
+  key: "seriesExpression" | "categoryExpression" | "valueExpression",
+  value: string,
+): void {
+  if (!report.value) {
+    return;
+  }
+  series[key] = chartExpression(value);
+  rememberChartFields(report.value, chart);
+}
+
+function addChartSeries(chart: Extract<Element, { type: "chart" }>): void {
+  const series = chart.series ?? [];
+  chart.series = series;
+  const index = series.length + 1;
+  series.push({
+    seriesExpression: `"SERIES ${index}"`,
+    categoryExpression: series[0]?.categoryExpression ?? "0",
+    valueExpression: "0",
+  });
 }
 
 function clampEdited(element: ReportElement): void {
@@ -2148,8 +2183,9 @@ onBeforeUnmount(() => {
                   </div>
                 </template>
                 <template v-else-if="element.type === 'chart'">
-                  <div class="flex h-full items-center justify-center bg-slate-200 text-xs text-slate-600">
-                    {{ element.kind }}
+                  <div class="flex h-full flex-col items-center justify-center bg-slate-200 px-1 text-center text-xs text-slate-600">
+                    <span>{{ chartKindLabel(element.kind) }}</span>
+                    <span v-if="element.title" class="mt-0.5 text-[10px] text-slate-500">{{ element.title }}</span>
                   </div>
                 </template>
                 <template v-else-if="element.type === 'image'">
@@ -2480,19 +2516,6 @@ onBeforeUnmount(() => {
           </template>
 
           <template v-else-if="editedElement && (selection.kind === 'element' || selection.kind === 'cell')">
-            <template v-if="editedElement.type === 'chart'">
-              <p class="text-xs text-gray-400">
-                <template v-if="plotsChart(editedElement.kind)">
-                  {{ editedElement.kind }} is plotted in Preview.
-                </template>
-                <template v-else>This box marks {{ editedElement.kind }}. Preview keeps the placeholder.</template>
-              </p>
-              <ul v-if="editedElement.series?.length" class="space-y-1 text-xs text-gray-300">
-                <li v-for="(series, index) in editedElement.series" :key="index" class="font-mono">
-                  {{ series.seriesExpression }} · {{ series.categoryExpression }} · {{ series.valueExpression }}
-                </li>
-              </ul>
-            </template>
             <div class="grid grid-cols-2 gap-2">
               <label class="text-xs text-gray-400">
                 X
@@ -2511,6 +2534,90 @@ onBeforeUnmount(() => {
                 <input :class="inputClass" type="number" :value="editedElement.element.height" @change="commitNumber(($event.target as HTMLInputElement).value, (value) => { if (editedElement) { editedElement.element.height = value; clampEdited(editedElement.element); } })" />
               </label>
             </div>
+
+            <template v-if="editedElement.type === 'chart'">
+              <p class="text-xs text-gray-400">
+                <template v-if="plotsChart(editedElement.kind)">Preview plots this chart.</template>
+                <template v-else>Preview keeps the placeholder for {{ editedElement.kind }}.</template>
+              </p>
+              <label class="block text-xs text-gray-400">
+                Kind
+                <select :class="inputClass" :value="editedElement.kind" @change="edit(() => { if (editedElement?.type === 'chart') editedElement.kind = ($event.target as HTMLSelectElement).value; })">
+                  <option v-if="!plotsChart(editedElement.kind)" :value="editedElement.kind">{{ editedElement.kind }}</option>
+                  <option v-for="kind in CHART_KINDS" :key="kind.id" :value="kind.id">{{ kind.label }}</option>
+                </select>
+              </label>
+              <label class="block text-xs text-gray-400">
+                Title
+                <input :class="inputClass" :value="editedElement.title ?? ''" placeholder="Chart title" @change="edit(() => { if (editedElement?.type === 'chart') editedElement.title = chartExpression(($event.target as HTMLInputElement).value) || null; })" />
+              </label>
+              <label class="block text-xs text-gray-400">
+                Subtitle
+                <input :class="inputClass" :value="editedElement.subtitle ?? ''" @change="edit(() => { if (editedElement?.type === 'chart') editedElement.subtitle = chartExpression(($event.target as HTMLInputElement).value) || null; })" />
+              </label>
+              <label class="flex items-center gap-2 text-xs text-gray-300">
+                <input
+                  type="checkbox"
+                  :checked="editedElement.showLegend !== false"
+                  @change="edit(() => { if (editedElement?.type === 'chart') editedElement.showLegend = ($event.target as HTMLInputElement).checked; })"
+                />
+                Show legend
+              </label>
+              <label class="block text-xs text-gray-400">
+                Evaluation
+                <select :class="inputClass" :value="editedElement.evaluationTime ?? ''" @change="edit(() => { if (editedElement?.type === 'chart') editedElement.evaluationTime = ($event.target as HTMLSelectElement).value || null; })">
+                  <option value="">Now</option>
+                  <option value="Now">Now</option>
+                  <option value="Report">Report</option>
+                  <option value="Page">Page</option>
+                  <option value="Column">Column</option>
+                  <option value="Band">Band</option>
+                </select>
+              </label>
+              <label class="block text-xs text-gray-400">
+                Data array
+                <input
+                  :class="inputClass"
+                  :value="editedElement.dataSource ?? ''"
+                  placeholder="chartPoints"
+                  @change="edit(() => { if (report && editedElement?.type === 'chart') bindChartSource(report, editedElement, ($event.target as HTMLInputElement).value); })"
+                />
+              </label>
+              <p class="text-xs text-gray-500">Each object in that JSON array is one point. Leave it empty to read the main record once.</p>
+              <div v-for="(series, index) in editedElement.series ?? []" :key="index" class="space-y-2 rounded-md border border-slate-800 p-2">
+                <div class="flex items-center justify-between text-xs text-gray-400">
+                  Series {{ index + 1 }}
+                  <button type="button" class="text-red-400 hover:text-red-300" @click="edit(() => { if (editedElement?.type === 'chart') editedElement.series?.splice(index, 1); })">Remove</button>
+                </div>
+                <label class="block text-xs text-gray-400">
+                  Name
+                  <input :class="inputClass" :value="series.seriesExpression" @change="edit(() => { if (editedElement?.type === 'chart') setChartExpression(editedElement, series, 'seriesExpression', ($event.target as HTMLInputElement).value); })" />
+                </label>
+                <label class="block text-xs text-gray-400">
+                  Category
+                  <input :class="inputClass" :value="series.categoryExpression" @change="edit(() => { if (editedElement?.type === 'chart') setChartExpression(editedElement, series, 'categoryExpression', ($event.target as HTMLInputElement).value); })" />
+                </label>
+                <label class="block text-xs text-gray-400">
+                  Use
+                  <select :class="inputClass" @change="edit(() => { const value = ($event.target as HTMLSelectElement).value; if (value && report && editedElement?.type === 'chart') setChartExpression(editedElement, series, 'categoryExpression', value); })">
+                    <option value="">Choose</option>
+                    <option v-for="choice in chartChoices(report, editedElement, series.categoryExpression)" :key="choice" :value="choice">{{ choice }}</option>
+                  </select>
+                </label>
+                <label class="block text-xs text-gray-400">
+                  Value
+                  <input :class="inputClass" :value="series.valueExpression" @change="edit(() => { if (editedElement?.type === 'chart') setChartExpression(editedElement, series, 'valueExpression', ($event.target as HTMLInputElement).value); })" />
+                </label>
+                <label class="block text-xs text-gray-400">
+                  Use
+                  <select :class="inputClass" @change="edit(() => { const value = ($event.target as HTMLSelectElement).value; if (value && report && editedElement?.type === 'chart') setChartExpression(editedElement, series, 'valueExpression', value); })">
+                    <option value="">Choose</option>
+                    <option v-for="choice in chartChoices(report, editedElement, series.valueExpression)" :key="choice" :value="choice">{{ choice }}</option>
+                  </select>
+                </label>
+              </div>
+              <FwbButton size="xs" @click="edit(() => { if (editedElement?.type === 'chart') addChartSeries(editedElement); })">Add series</FwbButton>
+            </template>
 
             <template v-if="editedElement.type === 'image'">
               <label class="block text-xs text-gray-400">
@@ -2774,11 +2881,8 @@ onBeforeUnmount(() => {
               Add column
             </FwbButton>
 
-            <FwbButton v-if="editedElement.type !== 'chart'" size="xs" color="red" @click="removeSelected">
+            <FwbButton size="xs" color="red" @click="removeSelected">
               Delete
-            </FwbButton>
-            <FwbButton v-else size="xs" color="alternative" @click="removeSelected">
-              Remove placeholder
             </FwbButton>
           </template>
         </div>

@@ -215,7 +215,15 @@ export const BAND_LABEL: Record<BandKind, string> = {
   background: "Background",
 };
 
-export type Tool = "staticText" | "textField" | "image" | "line" | "rectangle" | "table";
+export type Tool = "staticText" | "textField" | "image" | "line" | "rectangle" | "table" | "chart";
+
+export const CHART_KINDS: { id: string; label: string }[] = [
+  { id: "barChart", label: "Bar" },
+  { id: "stackedBarChart", label: "Stacked bar" },
+  { id: "lineChart", label: "Line" },
+  { id: "areaChart", label: "Area" },
+  { id: "stackedAreaChart", label: "Stacked area" },
+];
 
 export type Handle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
@@ -380,6 +388,57 @@ export function applyResize(
 
 export function fieldExpression(name: string): string {
   return `$F{${name}}`;
+}
+
+export function chartExpression(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.startsWith("$") || trimmed.startsWith('"') || /^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+    return trimmed;
+  }
+  return `"${trimmed.replace(/"/g, '\\"')}"`;
+}
+
+export function chartChoices(
+  report: Report,
+  chart: Extract<Element, { type: "chart" }>,
+  current: string,
+): string[] {
+  const dataset = chart.subDataset
+    ? report.subdatasets.find((item) => item.name === chart.subDataset)
+    : null;
+  return expressionChoices(dataset ? dataset.fields : report.fields, current, false);
+}
+
+export function bindChartSource(report: Report, chart: Extract<Element, { type: "chart" }>, source: string): void {
+  const name = source.trim();
+  if (!name) {
+    chart.dataSource = null;
+    chart.subDataset = null;
+    return;
+  }
+  chart.dataSource = name;
+  chart.subDataset = ensureDataset(report, name).name;
+  rememberChartFields(report, chart);
+}
+
+export function rememberChartFields(report: Report, chart: Extract<Element, { type: "chart" }>): void {
+  const datasetName = chart.subDataset;
+  if (!datasetName) {
+    return;
+  }
+  const dataset = ensureDataset(report, datasetName);
+  for (const series of chart.series ?? []) {
+    for (const expression of [series.seriesExpression, series.categoryExpression, series.valueExpression]) {
+      const name = fieldName(expression);
+      if (name && !dataset.fields.some((field) => field.name === name)) {
+        dataset.fields.push(makeField(name));
+      }
+    }
+  }
+}
+
+function fieldName(expression: string): string | null {
+  return /^\$F\{([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(expression.trim())?.[1] ?? null;
 }
 
 export function expressionChoices(fields: Field[], current: string, includeBuiltins: boolean): string[] {
@@ -676,6 +735,17 @@ function createElement(report: Report, tool: Tool, x: number, y: number): Elemen
       return { type: "rectangle", element: frame(x, y, 40, 20) };
     case "image":
       return { type: "image", element: frame(x, y, 50, 50), expression: "" };
+    case "chart":
+      return {
+        type: "chart",
+        element: frame(x, y, 200, 200),
+        kind: "barChart",
+        evaluationTime: "Report",
+        showLegend: true,
+        series: [
+          { seriesExpression: '"SERIES 1"', categoryExpression: "0", valueExpression: "0" },
+        ],
+      };
     case "table":
       return newTable(report, x, y);
   }
