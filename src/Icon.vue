@@ -36,6 +36,7 @@ withDefaults(
     stroke="currentColor"
     class="shrink-0"
     :class="size === 'lg' ? 'h-6 w-6' : 'h-4 w-4'"
+    draggable="false"
     aria-hidden="true"
   >
     <path

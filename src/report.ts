@@ -660,6 +660,22 @@ export function setBorderColor(element: ReportElement, color: Color): void {
   ensurePen(element).lineColor = color;
 }
 
+export function ensureBand(report: Report, kind: BandKind): number {
+  const existing = report.bands.findIndex((band) => band.kind === kind);
+  if (existing >= 0) {
+    return existing;
+  }
+  const band = emptyBand(kind, 0);
+  const order = BAND_ORDER.indexOf(kind);
+  const insertAt = report.bands.findIndex((item) => BAND_ORDER.indexOf(item.kind) > order);
+  if (insertAt < 0) {
+    report.bands.push(band);
+    return report.bands.length - 1;
+  }
+  report.bands.splice(insertAt, 0, band);
+  return insertAt;
+}
+
 function emptyBand(kind: BandKind, height: number): Band {
   return { kind, height, splitType: "stretch", elements: [] };
 }

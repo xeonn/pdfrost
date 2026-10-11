@@ -23,6 +23,7 @@ import {
   colorFromHex,
   contentBottom,
   elementLabel,
+  ensureBand,
   expressionChoices,
   hexColor,
   nudge,
@@ -96,6 +97,8 @@ const inspectorOpen = ref(true);
 const outlineWidth = ref(224);
 const inspectorWidth = ref(288);
 const dropBand = ref<number | null>(null);
+const SUMMARY_SLOT = -1;
+const SUMMARY_SLOT_HEIGHT = 48;
 const DRAG_TOOL = "application/pdfrost-tool";
 const DRAG_FIELD = "application/pdfrost-field";
 const error = ref("");
@@ -150,14 +153,22 @@ const designedHeight = computed(() => {
   const bands = bandRows.value.reduce((sum, row) => sum + row.band.height, 0);
   return topMargin.value + bands + bottomMargin.value;
 });
+const summaryMissing = computed(() => !!report.value && !report.value.bands.some((band) => band.kind === "summary"));
 const sheetHeight = computed(() => {
   if (!report.value) {
     return 0;
   }
-  return Math.max(report.value.pageHeight, designedHeight.value);
+  const slot = summaryMissing.value ? SUMMARY_SLOT_HEIGHT : 0;
+  return Math.max(report.value.pageHeight, designedHeight.value + slot);
 });
-const pageRemainder = computed(() => Math.max(0, sheetHeight.value - designedHeight.value));
-const pastPage = computed(() => !!report.value && designedHeight.value > report.value.pageHeight);
+const pageRemainder = computed(() => {
+  const slot = summaryMissing.value ? SUMMARY_SLOT_HEIGHT : 0;
+  return Math.max(0, sheetHeight.value - designedHeight.value - slot);
+});
+const pastPage = computed(() => {
+  const slot = summaryMissing.value ? SUMMARY_SLOT_HEIGHT : 0;
+  return !!report.value && designedHeight.value + slot > report.value.pageHeight;
+});
 const selectedBand = computed(() => {
   if (!report.value || selection.value.kind !== "band") {
     return null;
@@ -694,6 +705,29 @@ function onToolDragStart(event: DragEvent, id: Tool): void {
   }
 }
 
+function toolFromDrop(transfer: DataTransfer | null): Tool | null {
+  if (!transfer) {
+    return null;
+  }
+  const id = transfer.getData(DRAG_TOOL) || transfer.getData("text/plain");
+  return palette.some((item) => item.id === id) ? (id as Tool) : null;
+}
+
+function summarySlotAfter(rowIndex: number): boolean {
+  if (!summaryMissing.value) {
+    return false;
+  }
+  const row = bandRows.value[rowIndex];
+  const next = bandRows.value[rowIndex + 1];
+  if (!row) {
+    return false;
+  }
+  const summaryOrder = BAND_ORDER.indexOf("summary");
+  const rowOrder = BAND_ORDER.indexOf(row.band.kind);
+  const nextOrder = next ? BAND_ORDER.indexOf(next.band.kind) : BAND_ORDER.length;
+  return rowOrder < summaryOrder && nextOrder > summaryOrder;
+}
+
 function onFieldDragStart(event: DragEvent, name: string): void {
   event.dataTransfer?.setData(DRAG_FIELD, name);
   event.dataTransfer?.setData("text/plain", name);
@@ -727,9 +761,8 @@ function onBandDrop(event: DragEvent, bandIndex: number): void {
   if (!report.value) {
     return;
   }
-  const droppedTool = event.dataTransfer?.getData(DRAG_TOOL) ?? "";
   const fieldName = event.dataTransfer?.getData(DRAG_FIELD) ?? "";
-  const armed = palette.some((item) => item.id === droppedTool) ? (droppedTool as Tool) : null;
+  const armed = toolFromDrop(event.dataTransfer);
   if (!armed && !fieldName) {
     return;
   }
@@ -753,6 +786,64 @@ function onBandDrop(event: DragEvent, bandIndex: number): void {
     selection.value = { kind: "element", band: bandIndex, index };
     tool.value = null;
   });
+}
+
+function placeOnSummary(x: number, y: number, armed: Tool | null, fieldName: string): void {
+  if (!report.value || (!armed && !fieldName)) {
+    return;
+  }
+  edit(() => {
+    const bandIndex = ensureBand(report.value!, "summary");
+    const index = armed
+      ? placeElement(report.value!, bandIndex, armed, x, y)
+      : fieldName
+        ? placeField(report.value!, bandIndex, fieldName, x, y)
+        : null;
+    if (index === null) {
+      if (armed === "table") {
+        error.value = "Tables go on the Detail band.";
+      }
+      return;
+    }
+    error.value = "";
+    selection.value = { kind: "element", band: bandIndex, index };
+    tool.value = null;
+  });
+}
+
+function onSummaryDragOver(event: DragEvent): void {
+  if (!event.dataTransfer) {
+    return;
+  }
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "copy";
+  dropBand.value = SUMMARY_SLOT;
+}
+
+function onSummaryDrop(event: DragEvent): void {
+  event.preventDefault();
+  dropBand.value = null;
+  const content = (event.currentTarget as HTMLElement).querySelector("[data-band-content]");
+  const bounds = (content instanceof HTMLElement ? content : (event.currentTarget as HTMLElement)).getBoundingClientRect();
+  placeOnSummary(
+    (event.clientX - bounds.left) / scale.value,
+    (event.clientY - bounds.top) / scale.value,
+    toolFromDrop(event.dataTransfer),
+    event.dataTransfer?.getData(DRAG_FIELD) ?? "",
+  );
+}
+
+function onSummaryClick(event: MouseEvent): void {
+  if (!tool.value) {
+    return;
+  }
+  const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  placeOnSummary(
+    (event.clientX - bounds.left) / scale.value,
+    (event.clientY - bounds.top) / scale.value,
+    tool.value,
+    "",
+  );
 }
 
 function onBandClick(event: MouseEvent, bandIndex: number): void {
@@ -2005,9 +2096,8 @@ onBeforeUnmount(() => {
           @pointerleave="pointer = null"
         >
           <div class="bg-slate-200" :style="{ height: `${topMargin}px` }" />
+          <template v-for="(row, rowIndex) in bandRows" :key="`canvas-${row.index}`">
           <div
-            v-for="row in bandRows"
-            :key="`canvas-${row.index}`"
             class="relative flex"
             :data-band-index="row.index"
             @click="tool ? undefined : select({ kind: 'band', index: row.index })"
@@ -2230,6 +2320,28 @@ onBeforeUnmount(() => {
               />
             </div>
           </div>
+          <div
+            v-if="summarySlotAfter(rowIndex)"
+            class="relative flex"
+            @dragover="onSummaryDragOver"
+            @dragleave="onBandDragLeave($event, SUMMARY_SLOT)"
+            @drop="onSummaryDrop"
+          >
+            <div class="shrink-0 bg-slate-200" :style="{ width: `${leftMargin}px` }" />
+            <div
+              data-band-content
+              class="relative"
+              :class="dropBand === SUMMARY_SLOT ? 'bg-blue-50 ring-1 ring-inset ring-blue-300' : 'bg-white'"
+              :style="{ width: `${columnWidth}px`, height: `${SUMMARY_SLOT_HEIGHT}px`, ...gridStyle }"
+              @click.stop="onSummaryClick"
+            >
+              <div class="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
+                <span class="select-none text-xs font-medium uppercase tracking-[0.18em] text-slate-400/70">Summary</span>
+              </div>
+            </div>
+            <div class="min-w-0 flex-1 bg-slate-200" />
+          </div>
+          </template>
           <div v-if="pageRemainder > 0" class="flex" :style="{ height: `${pageRemainder}px` }">
             <div class="shrink-0 bg-slate-200" :style="{ width: `${leftMargin}px` }" />
             <div class="min-w-0 flex-1 bg-white" />
@@ -2281,10 +2393,11 @@ onBeforeUnmount(() => {
           @pointerdown.stop="onPanelResizeDown($event, 'inspector')"
         />
         <div class="grid shrink-0 grid-cols-[repeat(auto-fill,minmax(4.5rem,1fr))] gap-1 p-2">
-          <button
+          <div
             v-for="item in palette"
             :key="item.id"
-            type="button"
+            role="button"
+            tabindex="0"
             class="flex cursor-grab flex-col items-center gap-1 rounded-md border px-1 py-2 text-center text-[10px] leading-tight active:cursor-grabbing"
             :class="
               tool === item.id
@@ -2295,10 +2408,11 @@ onBeforeUnmount(() => {
             draggable="true"
             @dragstart="onToolDragStart($event, item.id)"
             @click="tool = tool === item.id ? null : item.id"
+            @keydown.enter.prevent="tool = tool === item.id ? null : item.id"
           >
             <Icon :name="item.icon" size="lg" class="text-blue-300" />
             {{ item.label }}
-          </button>
+          </div>
         </div>
         <div class="border-y border-slate-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
           Properties
