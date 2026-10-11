@@ -57,7 +57,7 @@ go test ./...
 
 That test renders `jrxmls/Sample.jrxml` with the embedded wasm. The category charts are plotted from `chartPoints`, so the result does not carry a `chart` warning.
 
-Rebuild `engine.wasm` after an engine change, then copy it into the module so the next tag ships the new bytes:
+`go/engine.wasm` is updated only when a release of the Go module is planned. Engine changes on `development` do not refresh the embed. When that release is being prepared, rebuild the blob and commit it so the tag ships the new bytes:
 
 ```bash
 rustup target add wasm32-unknown-unknown

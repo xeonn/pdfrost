@@ -96,7 +96,7 @@ cd go && go test ./...
 
 The test renders `jrxmls/Sample.jrxml` through the embedded wasm. The category charts are plotted from `chartPoints`, so the result does not carry a `chart` warning.
 
-After changing the Rust engine, rebuild the blob this module embeds and commit the new file with the tag:
+`go/engine.wasm` is updated only when a release of this module is planned. Engine changes on `development` do not refresh the embed. When that release is being prepared, rebuild the blob and commit it with the tag:
 
 ```bash
 rustup target add wasm32-unknown-unknown
