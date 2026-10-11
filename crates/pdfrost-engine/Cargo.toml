@@ -10,6 +10,7 @@ name = "pdfrost_engine"
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 krilla = "0.8"
 pdfrost-charts = { path = "../pdfrost-charts" }
 roxmltree = "0.20"

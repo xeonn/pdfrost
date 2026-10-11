@@ -1,6 +1,7 @@
 use chrono::{TimeZone, Utc};
 use pdfrost_engine::{
-    parse, render, write_report, BandKind, Element, LineSpacing, PlacementKind, PositionType,
+    parse, render, render_with_assets, write_report, BandKind, Element, HorizontalImageAlign,
+    LineSpacing, OnErrorType, PlacementKind, PositionType, ScaleImage,
 };
 use serde_json::json;
 
@@ -120,6 +121,90 @@ fn ellipse_uses_the_graphic_pen_and_stays_in_its_box() {
     let again = parse(&write_report(&parsed)).unwrap();
     assert!(matches!(again.bands[0].elements[0], Element::Ellipse(_)));
 }
+
+#[test]
+fn image_round_trips_its_attributes_and_paints_a_file_beside_the_template() {
+    let xml = report(
+        r##"<title>
+    <band height="80" splitType="Stretch">
+      <image scaleImage="Clip" hAlign="Center" vAlign="Middle" isLazy="true" onErrorType="Icon" evaluationTime="Report">
+        <reportElement x="8" y="4" width="40" height="30"/>
+        <imageExpression class="java.lang.String"><![CDATA["mark.png"]]></imageExpression>
+        <hyperlinkReferenceExpression><![CDATA["https://example.com"]]></hyperlinkReferenceExpression>
+      </image>
+    </band>
+  </title>"##,
+    );
+    let parsed = parse(&xml).unwrap();
+    assert!(parsed
+        .warnings
+        .iter()
+        .any(|warning| warning.tag == "hyperlinkReferenceExpression"));
+    let Element::Image(image) = &parsed.bands[0].elements[0] else {
+        panic!("image");
+    };
+    assert_eq!(image.expression, "\"mark.png\"");
+    assert_eq!(image.scale_image, Some(ScaleImage::Clip));
+    assert_eq!(image.h_align, Some(HorizontalImageAlign::Center));
+    assert_eq!(
+        image.v_align,
+        Some(pdfrost_engine::VerticalAlignment::Middle)
+    );
+    assert!(image.lazy);
+    assert_eq!(image.on_error_type, Some(OnErrorType::Icon));
+    assert_eq!(image.evaluation_time.as_deref(), Some("Report"));
+    assert!(image.expression_class.is_none());
+
+    let written = write_report(&parsed);
+    assert!(written.contains("scaleImage=\"Clip\""));
+    assert!(written.contains("hAlign=\"Center\""));
+    assert!(written.contains("vAlign=\"Middle\""));
+    assert!(written.contains("isLazy=\"true\""));
+    assert!(written.contains("onErrorType=\"Icon\""));
+    assert!(written.contains("evaluationTime=\"Report\""));
+    assert!(written.contains("<imageExpression>&quot;mark.png&quot;</imageExpression>"));
+    assert!(!written.contains("hyperlinkReferenceExpression"));
+
+    let dir = std::env::temp_dir().join(format!("pdfrost-image-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("mark.png"), PNG_1X1).unwrap();
+    let output = render_with_assets(&xml, &json!({}), when(), Some(&dir)).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let placed = output
+        .placements
+        .iter()
+        .find(|placement| placement.kind == PlacementKind::Image)
+        .unwrap();
+    assert_eq!(placed.x, 18.0);
+    assert_eq!(placed.y, 14.0);
+    assert_eq!(placed.width, 40.0);
+    assert_eq!(placed.height, 30.0);
+    assert!(output.pdf.windows(6).any(|bytes| bytes == b"/Image"));
+
+    let missing = report(
+        r##"<title>
+    <band height="40" splitType="Stretch">
+      <image onErrorType="Blank">
+        <reportElement x="0" y="0" width="20" height="20"/>
+        <imageExpression><![CDATA["missing.png"]]></imageExpression>
+      </image>
+    </band>
+  </title>"##,
+    );
+    let blank = render(&missing, &json!({}), when()).unwrap();
+    assert!(blank
+        .warnings
+        .iter()
+        .all(|warning| !warning.tag.starts_with("image:")));
+}
+
+const PNG_1X1: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0xC9, 0xFE, 0x92, 0xEF, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
+];
 
 #[test]
 fn column_footer_sits_above_the_page_footer_and_shrinks_the_page() {

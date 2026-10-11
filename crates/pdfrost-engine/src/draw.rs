@@ -1,7 +1,9 @@
-//! Place and paint bands, text, rules, rectangles, and tables.
+//! Place and paint bands, text, rules, rectangles, images, and tables.
 //!
 //! A table grows with its rows. Rows that do not fit move to the next page, and that
 //! page repeats the table's column header. `$F` inside a table reads the current row.
+
+use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use krilla::color::rgb;
@@ -34,6 +36,7 @@ enum Body {
     Line,
     Rectangle,
     Ellipse,
+    Image(crate::image::Prepared),
     Chart(Option<pdfrost_charts::CategoryChart>),
 }
 
@@ -41,6 +44,7 @@ pub(crate) fn draw(
     report: &Report,
     document: &Value,
     rendered_at: DateTime<Utc>,
+    asset_dir: Option<&Path>,
 ) -> Result<RenderOutput, Error> {
     if report.page_width <= 0.0 || report.page_height <= 0.0 {
         return Err(Error::PageSize);
@@ -50,7 +54,7 @@ pub(crate) fn draw(
     let italic = load_font(DEFAULT_SANS_ITALIC)?;
     let bold_italic = load_font(DEFAULT_SANS_BOLD_ITALIC)?;
     let mut warnings = report.warnings.clone();
-    let pages = layout(report, document, rendered_at, &mut warnings);
+    let pages = layout(report, document, rendered_at, asset_dir, &mut warnings);
 
     let mut pdf_document = Document::new();
     let settings =
@@ -83,12 +87,14 @@ fn layout(
     report: &Report,
     document: &Value,
     rendered_at: DateTime<Utc>,
+    asset_dir: Option<&Path>,
     warnings: &mut Vec<Warning>,
 ) -> Vec<Vec<Drawn>> {
     let mut layout = Layout {
         report,
         document,
         rendered_at,
+        asset_dir,
         warnings,
         pages: Vec::new(),
         page: 0,
@@ -111,6 +117,7 @@ struct Layout<'a> {
     report: &'a Report,
     document: &'a Value,
     rendered_at: DateTime<Utc>,
+    asset_dir: Option<&'a Path>,
     warnings: &'a mut Vec<Warning>,
     pages: Vec<Vec<Drawn>>,
     page: u32,
@@ -414,6 +421,22 @@ impl Layout<'_> {
                 );
                 0.0
             }
+            Element::Image(image) => {
+                let prepared =
+                    crate::image::prepare(image, fields, data, self.asset_dir, self.warnings);
+                let extra = prepared.extra_height();
+                let mut grown = image.element.clone();
+                grown.height += extra;
+                self.push_graphic(
+                    origin_x + image.element.x,
+                    origin_y + image.element.y,
+                    &grown,
+                    PlacementKind::Image,
+                    Some(image.expression.clone()),
+                    Body::Image(prepared),
+                );
+                extra
+            }
             Element::Break(_) => 0.0,
             Element::Chart(chart) => {
                 let plot = crate::chart::prepare(
@@ -480,9 +503,10 @@ impl Layout<'_> {
     ) {
         let stroke_width = match kind {
             PlacementKind::Text => pen_width(element),
-            PlacementKind::Line | PlacementKind::Rectangle | PlacementKind::Ellipse => {
-                positive_pen_width(element)
-            }
+            PlacementKind::Line
+            | PlacementKind::Rectangle
+            | PlacementKind::Ellipse
+            | PlacementKind::Image => positive_pen_width(element),
             PlacementKind::Chart => Some(1.0),
         };
         self.push(Drawn {
@@ -628,6 +652,12 @@ fn paint(
         }
         Body::Ellipse => {
             paint_ellipse(surface, x, y, width, height, &item.element);
+        }
+        Body::Image(prepared) => {
+            paint_image(surface, x, y, width, height, prepared);
+            if let Some(borders) = &item.element.borders {
+                stroke_box(surface, x, y, width, height, borders);
+            }
         }
         Body::Chart(plot) => {
             if let Some(plot) = plot {
@@ -1767,6 +1797,98 @@ fn smooth_stroke(width: f32, color: Color) -> Stroke {
         line_join: LineJoin::Round,
         ..Stroke::default()
     }
+}
+
+fn paint_image(
+    surface: &mut krilla::surface::Surface<'_>,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    prepared: &crate::image::Prepared,
+) {
+    match prepared {
+        crate::image::Prepared::Blank => {}
+        crate::image::Prepared::Icon => paint_missing_icon(surface, x, y, width, height),
+        crate::image::Prepared::Bitmap(bitmap) => {
+            let Some(path) = rect_path(x, y, width, height) else {
+                return;
+            };
+            let Some(image) = crate::image::krilla_image(&bitmap.bytes) else {
+                return;
+            };
+            let Some(size) = krilla::geom::Size::from_wh(bitmap.width, bitmap.height) else {
+                return;
+            };
+            surface.push_clip_path(&path, &FillRule::NonZero);
+            if let Some(rotation) = bitmap.rotation {
+                surface.push_transform(&crate::image::rotation_transform(
+                    rotation, x, y, width, height,
+                ));
+            }
+            surface.push_transform(&Transform::from_translate(x + bitmap.x, y + bitmap.y));
+            surface.draw_image(image, size);
+            surface.pop();
+            if bitmap.rotation.is_some() {
+                surface.pop();
+            }
+            surface.pop();
+        }
+    }
+}
+
+fn paint_missing_icon(
+    surface: &mut krilla::surface::Surface<'_>,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+) {
+    let side = width.min(height).min(16.0).max(0.0);
+    if side <= 0.0 {
+        return;
+    }
+    let left = x + (width - side) / 2.0;
+    let top = y + (height - side) / 2.0;
+    fill_rect(
+        surface,
+        left,
+        top,
+        side,
+        side,
+        Color {
+            r: 226,
+            g: 232,
+            b: 240,
+        },
+        255,
+    );
+    let pen = Pen {
+        line_width: Some(1.0),
+        line_color: Some(Color {
+            r: 100,
+            g: 116,
+            b: 139,
+        }),
+        line_style: Some("Solid".to_string()),
+    };
+    stroke_rect(surface, left, top, side, side, Some(&pen));
+    stroke_line(
+        surface,
+        left + 3.0,
+        top + 3.0,
+        left + side - 3.0,
+        top + side - 3.0,
+        Some(&pen),
+    );
+    stroke_line(
+        surface,
+        left + side - 3.0,
+        top + 3.0,
+        left + 3.0,
+        top + side - 3.0,
+        Some(&pen),
+    );
 }
 
 fn paint_ellipse(

@@ -12,7 +12,7 @@ The model holds the report name, page width and height, margins, styles, fields,
 
 Field definitions keep `net.sf.jasperreports.json.field.expression` when it is present. That path is how a later fill reads `audit.created` or `product.id` from the JSON document. A field with no such property is read by its field name.
 
-Parse fails when the XML is not a `jasperReport` document. It does not fail because a chart, an image, or another unsupported tag is present.
+Parse fails when the XML is not a `jasperReport` document. It does not fail because a chart or another unsupported tag is present.
 
 ## 2. Fill
 
@@ -53,7 +53,7 @@ Band order follows JasperReports for the bands this subset supports:
 
 Every sample band sets `splitType="Stretch"`. Layout does not start that band unless the space remaining on the page is at least the band's declared height. A table row or a detail band that does not fit moves to the next page. The page header, the page footer, and the table's `jr:columnHeader` repeat on the new page. `$V{PAGE_NUMBER}` is the number of that page. There is no "Page X of Y": no text field sets `evaluationTime="Report"`.
 
-Elements on a band paint in document order. A rectangle listed before a label stays behind that label. An `elementGroup` is flattened onto that band, so its children keep their own coordinates. An `ellipse` is drawn in its element box. A `break` of type `Page` or `Column` in the title, detail, or summary opens the next page, and the elements after it in that band are placed from the new page.
+Elements on a band paint in document order. A rectangle listed before a label stays behind that label. An `elementGroup` is flattened onto that band, so its children keep their own coordinates. An `ellipse` is drawn in its element box. An `image` draws a PNG or JPEG from a quoted path or from `$F{name}` when that field is a path. `RealHeight` and `RealSize` can grow the band. The picture is loaded while the page is drawn, including when `evaluationTime` is not `Now`. A `break` of type `Page` or `Column` in the title, detail, or summary opens the next page, and the elements after it in that band are placed from the new page.
 
 A `jr:table` with `whenNoDataType="AllSectionsNoDetail"` still lays out its header sections when `itemsList` is missing or empty, and lays out no detail cells. A `jr:columnFooter` with a height and no children still consumes that height.
 

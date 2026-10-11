@@ -134,6 +134,7 @@ fn write_element(xml: &mut String, element: &Element, indent: usize) {
         Element::Line(graphic) => write_graphic(xml, indent, "line", &graphic.element),
         Element::Rectangle(graphic) => write_graphic(xml, indent, "rectangle", &graphic.element),
         Element::Ellipse(graphic) => write_graphic(xml, indent, "ellipse", &graphic.element),
+        Element::Image(image) => write_image(xml, indent, image),
         Element::Break(page_break) => write_break(xml, indent, page_break),
         Element::Chart(chart) => write_chart(xml, indent, chart),
         Element::Table(table) => write_table(xml, indent, table),
@@ -295,6 +296,77 @@ fn write_break(xml: &mut String, indent: usize, page_break: &PageBreak) {
     let _ = writeln!(xml, "{pad}<break type=\"{kind}\">");
     write_report_element(xml, &page_break.element, indent + 1);
     let _ = writeln!(xml, "{pad}</break>");
+}
+
+fn write_image(xml: &mut String, indent: usize, image: &Image) {
+    let pad = "\t".repeat(indent);
+    let _ = write!(xml, "{pad}<image");
+    if let Some(scale) = image.scale_image {
+        let _ = write!(xml, " scaleImage=\"{}\"", scale_image_name(scale));
+    }
+    if let Some(rotation) = image.rotation {
+        let _ = write!(xml, " rotation=\"{}\"", rotation_name(rotation));
+    }
+    if let Some(align) = image.h_align {
+        let _ = write!(xml, " hAlign=\"{}\"", image_h_align_name(align));
+    }
+    if let Some(align) = image.v_align {
+        let _ = write!(xml, " vAlign=\"{}\"", v_align(align));
+    }
+    if let Some(cache) = image.using_cache {
+        let _ = write!(xml, " isUsingCache=\"{}\"", cache);
+    }
+    if image.lazy {
+        xml.push_str(" isLazy=\"true\"");
+    }
+    if let Some(on_error) = image.on_error_type {
+        let _ = write!(xml, " onErrorType=\"{}\"", on_error_name(on_error));
+    }
+    if let Some(time) = &image.evaluation_time {
+        let _ = write!(xml, " evaluationTime=\"{}\"", escape(time));
+    }
+    if let Some(group) = &image.evaluation_group {
+        let _ = write!(xml, " evaluationGroup=\"{}\"", escape(group));
+    }
+    xml.push_str(">\n");
+    write_report_element(xml, &image.element, indent + 1);
+    if let Some(borders) = &image.element.borders {
+        write_box(xml, borders, indent + 1);
+    }
+    if !image.expression.is_empty() {
+        let _ = write!(xml, "{pad}\t<imageExpression");
+        if let Some(class) = &image.expression_class {
+            let _ = write!(xml, " class=\"{}\"", escape(class));
+        }
+        let _ = writeln!(xml, ">{}</imageExpression>", escape(&image.expression));
+    }
+    let _ = writeln!(xml, "{pad}</image>");
+}
+
+fn scale_image_name(scale: ScaleImage) -> &'static str {
+    match scale {
+        ScaleImage::Clip => "Clip",
+        ScaleImage::FillFrame => "FillFrame",
+        ScaleImage::RetainShape => "RetainShape",
+        ScaleImage::RealHeight => "RealHeight",
+        ScaleImage::RealSize => "RealSize",
+    }
+}
+
+fn image_h_align_name(align: HorizontalImageAlign) -> &'static str {
+    match align {
+        HorizontalImageAlign::Left => "Left",
+        HorizontalImageAlign::Center => "Center",
+        HorizontalImageAlign::Right => "Right",
+    }
+}
+
+fn on_error_name(on_error: OnErrorType) -> &'static str {
+    match on_error {
+        OnErrorType::Error => "Error",
+        OnErrorType::Blank => "Blank",
+        OnErrorType::Icon => "Icon",
+    }
 }
 
 fn write_graphic(xml: &mut String, indent: usize, tag: &str, element: &ReportElement) {

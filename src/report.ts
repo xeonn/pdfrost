@@ -116,6 +116,21 @@ export type Element =
   | { type: "line"; element: ReportElement }
   | { type: "rectangle"; element: ReportElement }
   | { type: "ellipse"; element: ReportElement }
+  | {
+      type: "image";
+      element: ReportElement;
+      expression: string;
+      expressionClass?: string | null;
+      scaleImage?: "clip" | "fillFrame" | "retainShape" | "realHeight" | "realSize" | null;
+      hAlign?: "left" | "center" | "right" | null;
+      vAlign?: "top" | "middle" | "bottom" | null;
+      rotation?: "left" | "right" | "upsideDown" | null;
+      usingCache?: boolean | null;
+      lazy?: boolean;
+      onErrorType?: "error" | "blank" | "icon" | null;
+      evaluationTime?: string | null;
+      evaluationGroup?: string | null;
+    }
   | { type: "break"; element: ReportElement; column: boolean }
   | {
       type: "chart";
@@ -200,7 +215,7 @@ export const BAND_LABEL: Record<BandKind, string> = {
   background: "Background",
 };
 
-export type Tool = "staticText" | "textField" | "line" | "rectangle" | "table";
+export type Tool = "staticText" | "textField" | "image" | "line" | "rectangle" | "table";
 
 export type Handle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
@@ -260,6 +275,8 @@ export function elementLabel(element: Element): string {
       return "Rectangle";
     case "ellipse":
       return "Ellipse";
+    case "image":
+      return element.expression.replace(/^"|"$/g, "") || "Image";
     case "break":
       return "Break";
     case "chart":
@@ -657,6 +674,8 @@ function createElement(report: Report, tool: Tool, x: number, y: number): Elemen
       return { type: "line", element: frame(x, y, 80, 1) };
     case "rectangle":
       return { type: "rectangle", element: frame(x, y, 40, 20) };
+    case "image":
+      return { type: "image", element: frame(x, y, 50, 50), expression: "" };
     case "table":
       return newTable(report, x, y);
   }

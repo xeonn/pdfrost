@@ -2,7 +2,7 @@
 
 Build the Design tab so it reads like Jaspersoft Studio 6.20’s **Design** editor, for the tags in [JRXML subset](jrxml-subset.md). Preview stays the PDF from `render`. Source stays the XML editor that already exists.
 
-JasperReports 6.20.1 is still the behavior reference. Studio 6.20.1.final is the screen reference: where the outline sits, how a band is drawn, and which properties a selected element shows. Studio’s charts, images, query dialog, and expression compiler stay out.
+JasperReports 6.20.1 is still the behavior reference. Studio 6.20.1.final is the screen reference: where the outline sits, how a band is drawn, and which properties a selected element shows. Studio’s query dialog and expression compiler stay out.
 
 ## Recommendation
 
@@ -21,7 +21,7 @@ Opening a Studio file and saving it is lossy. `write_report` emits the supported
 ## Goal
 
 1. Open a `.jrxml` the engine already parses and show its bands and elements on the Design tab.
-2. Change page size, margins, static text, text fields, lines, rectangles, and a simple table.
+2. Change page size, margins, static text, text fields, images, lines, rectangles, and a simple table.
 3. Save a `.jrxml` that `parse` accepts and that Preview renders without hand-written XML.
 4. Keep Design, Source, and Preview as three views of one file, the way Studio’s editor tabs do.
 
@@ -33,15 +33,15 @@ On Design, Studio arranges the work like this:
 
 - **Outline** (report inspector), usually on the left. The report node, then bands in order, then the elements inside each band. A **Fields** node lists `$F{…}` names. Selecting a node selects it on the canvas. The header hides the panel, the remaining rail shows it again, and dragging its inner edge resizes it.
 - **Band canvas** in the center. The sheet is the selected page size. A horizontal ruler and a vertical ruler stay pinned to the viewport and aligned with the page: a tick every 10 points, a label every 100, the margin ranges tinted, and the selected band or element marked. Margins on the sheet are shaded. Bands stack in the column between the left and right margins. Each band name is a light watermark in the column. Click empty space in a band, its margins, or its outline row to select it. The properties then show its height and whether it fits on the page. A thin line divides the bands, and dragging that line changes the band height. A selected band is tinted. Elements are boxes in document order, later elements painted above earlier ones. Static text shows its text. A text field shows its expression (`$F{docno}`), not a filled value. Both wrap, keep line breaks, and use the element's alignment, indents, first-line indent, spacing before, tabs, padding, size, bold, italic, underline, strike-through, line spacing, rotation, and styled or HTML markup. A table cell does the same, on top of that section's style fill and border. Stretch and `Float` are applied in the PDF; Design keeps the template boxes. Selection draws handles. Arrow keys nudge. Delete removes the element.
-- **Palette** of tools, with **Properties** below it, on the right. The ones this subset can emit: Static Text, Text Field, Line, Rectangle, Table. Studio’s Image, Frame, Ellipse, Chart, Subreport, Crosstab, and barcode stay off the palette. The header hides both, the remaining rail shows them again, and dragging the inner edge resizes the panel.
-- **Properties** for the current selection. For an element: `x`, `y`, `width`, `height`, and the text or expression. For text: size, bold, italic, underline, strike-through, markup, stretch, horizontal alignment, vertical alignment, line spacing, rotation, first-line indent, space before, and tab width. Every element has a border width and color. The width defaults to 0 and the PDF does not stroke it. Design still draws a light guide around that element, and a real border replaces the guide once the width is greater than 0. A rectangle is the box, not a label. For the report node: name, page width, page height, four margins, with A4 (595×842) and Letter (612×792) as presets. Column width is computed from the page width and the left and right margins.
+- **Palette** of tools, with **Properties** below it, on the right. The ones this subset can emit: Static Text, Text Field, Image, Line, Rectangle, Table. An image drops at 50×50. Its expression is a quoted path or a field. Studio’s Frame, Ellipse, Chart, Subreport, Crosstab, and barcode stay off the palette. The header hides both, the remaining rail shows them again, and dragging the inner edge resizes the panel.
+- **Properties** for the current selection. For an element: `x`, `y`, `width`, `height`, and the text or expression. For an image: the image expression, scale, alignment, error behavior, lazy, cache, evaluation time, and rotation. For text: size, bold, italic, underline, strike-through, markup, stretch, horizontal alignment, vertical alignment, line spacing, rotation, first-line indent, space before, and tab width. Every element has a border width and color. The width defaults to 0 and the PDF does not stroke it. Design still draws a light guide around that element, and a real border replaces the guide once the width is greater than 0. A rectangle is the box, not a label. For the report node: name, page width, page height, four margins, with A4 (595×842) and Letter (612×792) as presets. Column width is computed from the page width and the left and right margins.
 - **Grid.** Studio snaps to a grid. Use a 10-point grid. Arrow keys move by 1 point. Shift-arrow moves by 10.
 
 Studio interactions to copy, in order:
 
 1. Click an element or its outline row to select it.
 2. Edit the selection in Properties. Studio uses a properties view, not a modal, for these fields.
-3. Choose a palette tool, then click a band to drop a default-size element (Static Text 100×20, Text Field 100×16, Line 80×1, Rectangle 40×20). Dragging a new size and drag-from-palette can follow.
+3. Choose a palette tool, then click a band to drop a default-size element (Static Text 100×20, Text Field 100×16, Image 50×50, Line 80×1, Rectangle 40×20). Dragging a new size and drag-from-palette can follow.
 4. Drag inside the band to move. Drag a handle to resize. Keep the element inside the band: clamp `x`/`y` to the column width and the band height.
 5. Drag the band bar to set the band height. The height cannot shrink below the lowest element’s `y + height`.
 6. Double-click static text to edit the string on the canvas. A text field’s expression stays in Properties, as a short field, with the known fields offered as `$F{name}`.

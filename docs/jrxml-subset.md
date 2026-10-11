@@ -29,6 +29,7 @@ A tag that appears in none of these lists is unsupported.
 | `line` | A rule. |
 | `rectangle` | A box. |
 | `ellipse` | An oval in the element box. An opaque mode fills the oval. |
+| `image`, `imageExpression` | A PNG or JPEG in the element box. The expression is a quoted path or `$F{name}`. A path is read beside the template, then from the process directory. `scaleImage`, `hAlign`, `vAlign`, `rotation`, `isUsingCache`, `isLazy`, `onErrorType`, `evaluationTime`, and `evaluationGroup` are kept. A missing picture warns when `onErrorType` is `Error`, draws nothing when it is `Blank`, and draws a small mark when it is `Icon`. Hyperlinks on the image are warned and omitted. |
 | `elementGroup` | Children are laid out on the parent band. The group itself has no box. |
 | `break` | `type="Page"` or `type="Column"`. In `title`, `detail`, or `summary`, either starts the next page and later elements in that band use the new page. In a header, footer, or `background`, the tag is kept and does not split the page. |
 | `areaChart`, `barChart`, `lineChart`, `stackedAreaChart`, `stackedBarChart` | A category plot in the element box. See [Charts](charts.md). |
@@ -90,7 +91,6 @@ A tag in none of the tables in this document is unsupported. The render continue
 
 | Tag | Result |
 | --- | --- |
-| `image` | Omitted. |
 | `frame` | Omitted, including the elements inside it. |
 | `subreport` | Omitted. |
 | `crosstab` | Omitted. |

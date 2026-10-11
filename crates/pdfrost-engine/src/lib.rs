@@ -7,13 +7,17 @@ mod chart;
 mod draw;
 mod expr;
 mod fill;
+mod image;
 mod model;
 mod parse;
 mod write;
 
+use std::path::Path;
+
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
+pub use image::read_image_bytes;
 pub use model::*;
 pub use parse::parse;
 pub use write::write_report;
@@ -74,6 +78,8 @@ pub enum PlacementKind {
     Line,
     Rectangle,
     Ellipse,
+    /// An image box. `text` is the image expression.
+    Image,
     /// A chart box. `text` is the element tag when the series is plotted, or `Chart` for a placeholder.
     Chart,
 }
@@ -96,15 +102,27 @@ pub enum Error {
 /// Render `template_xml` with one JSON `document`.
 ///
 /// `rendered_at` is the instant printed for `new java.util.Date()`.
-/// Static labels, lines, rectangles, `$F` values, and tables are drawn.
+/// Static labels, lines, rectangles, images, `$F` values, and tables are drawn.
 /// `new java.util.Date()` prints `rendered_at` as `YYYY-MM-DD HH:MM:SS` in UTC.
+/// Image paths are resolved from the process directory. [`render_with_assets`]
+/// also looks beside the template.
 pub fn render(
     template_xml: &str,
     document: &Value,
     rendered_at: DateTime<Utc>,
 ) -> Result<RenderOutput, Error> {
+    render_with_assets(template_xml, document, rendered_at, None)
+}
+
+/// Same as [`render`], and relative image paths are tried in `asset_dir` first.
+pub fn render_with_assets(
+    template_xml: &str,
+    document: &Value,
+    rendered_at: DateTime<Utc>,
+    asset_dir: Option<&Path>,
+) -> Result<RenderOutput, Error> {
     let report = parse(template_xml)?;
-    draw::draw(&report, document, rendered_at)
+    draw::draw(&report, document, rendered_at, asset_dir)
 }
 
 #[cfg(test)]

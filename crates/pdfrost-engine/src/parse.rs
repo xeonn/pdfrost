@@ -44,6 +44,8 @@ const KNOWN: &[&str] = &[
     "line",
     "rectangle",
     "ellipse",
+    "image",
+    "imageExpression",
     "elementGroup",
     "break",
     "graphicElement",
@@ -408,6 +410,7 @@ impl Parser {
                 "ellipse" => elements.push(Element::Ellipse(Graphic {
                     element: self.parse_graphic(child, &child_location),
                 })),
+                "image" => elements.push(Element::Image(self.parse_image(child, &child_location))),
                 "break" => elements.push(self.parse_break(child, &child_location)),
                 "elementGroup" => {
                     elements.extend(self.parse_element_children(child, &child_location));
@@ -678,6 +681,138 @@ impl Parser {
             }
         }
         pen
+    }
+
+    fn parse_image(&mut self, node: Node<'_, '_>, location: &str) -> crate::model::Image {
+        for attr in node.attributes() {
+            if !matches!(
+                attr.name(),
+                "scaleImage"
+                    | "rotation"
+                    | "hAlign"
+                    | "vAlign"
+                    | "isUsingCache"
+                    | "isLazy"
+                    | "onErrorType"
+                    | "evaluationTime"
+                    | "evaluationGroup"
+            ) {
+                self.warn(attr.name(), location);
+            }
+        }
+        let mut image = crate::model::Image {
+            scale_image: node
+                .attribute("scaleImage")
+                .and_then(|value| self.parse_scale_image(value, location)),
+            h_align: node
+                .attribute("hAlign")
+                .and_then(|value| self.parse_image_h_align(value, location)),
+            v_align: node
+                .attribute("vAlign")
+                .and_then(|value| self.parse_vertical_alignment(value, location)),
+            rotation: node
+                .attribute("rotation")
+                .and_then(|value| self.parse_rotation(value, location)),
+            using_cache: self.optional_bool(node, "isUsingCache", location),
+            lazy: node.attribute("isLazy") == Some("true"),
+            on_error_type: node
+                .attribute("onErrorType")
+                .and_then(|value| self.parse_on_error(value, location)),
+            evaluation_time: node.attribute("evaluationTime").map(str::to_string),
+            evaluation_group: node.attribute("evaluationGroup").map(str::to_string),
+            ..crate::model::Image::default()
+        };
+        if let Some(flag) = node.attribute("isLazy") {
+            if flag != "true" && flag != "false" {
+                self.warn(&format!("isLazy={flag}"), location);
+            }
+        }
+        let mut saw_frame = false;
+        for child in element_children(node) {
+            let name = child.tag_name().name();
+            let child_location = join(location, name);
+            match name {
+                "reportElement" if !saw_frame => {
+                    image.element = self.parse_report_element(child, &child_location);
+                    saw_frame = true;
+                }
+                "box" => image.element.borders = Some(self.parse_box(child, &child_location)),
+                "graphicElement" => {
+                    if let Some(pen) = self.graphic_pen(child, &child_location) {
+                        let borders = image.element.borders.get_or_insert(Box::default());
+                        if borders.pen.is_none() {
+                            borders.pen = Some(pen);
+                        }
+                    }
+                }
+                "imageExpression" => {
+                    image.expression = element_text(child);
+                    if let Some(class) = child.attribute("class") {
+                        if class != "java.lang.String" {
+                            image.expression_class = Some(class.to_string());
+                        }
+                    }
+                }
+                "property" => {
+                    self.note_property(child, &child_location);
+                }
+                other => {
+                    self.warn(other, &child_location);
+                    self.collect_unknown(child, &child_location);
+                }
+            }
+        }
+        image
+    }
+
+    fn parse_scale_image(&mut self, value: &str, location: &str) -> Option<ScaleImage> {
+        match value {
+            "Clip" => Some(ScaleImage::Clip),
+            "FillFrame" => Some(ScaleImage::FillFrame),
+            "RetainShape" => Some(ScaleImage::RetainShape),
+            "RealHeight" => Some(ScaleImage::RealHeight),
+            "RealSize" => Some(ScaleImage::RealSize),
+            other => {
+                self.warn(&format!("scaleImage={other}"), location);
+                None
+            }
+        }
+    }
+
+    fn parse_image_h_align(&mut self, value: &str, location: &str) -> Option<HorizontalImageAlign> {
+        match value {
+            "Left" => Some(HorizontalImageAlign::Left),
+            "Center" => Some(HorizontalImageAlign::Center),
+            "Right" => Some(HorizontalImageAlign::Right),
+            other => {
+                self.warn(&format!("hAlign={other}"), location);
+                None
+            }
+        }
+    }
+
+    fn parse_on_error(&mut self, value: &str, location: &str) -> Option<OnErrorType> {
+        match value {
+            "Error" => Some(OnErrorType::Error),
+            "Blank" => Some(OnErrorType::Blank),
+            "Icon" => Some(OnErrorType::Icon),
+            other => {
+                self.warn(&format!("onErrorType={other}"), location);
+                None
+            }
+        }
+    }
+
+    fn optional_bool(&mut self, node: Node<'_, '_>, name: &str, location: &str) -> Option<bool> {
+        match node.attribute(name) {
+            Some("true") => Some(true),
+            Some("false") => Some(false),
+            Some(other) => {
+                self.warn(&format!("{name}={other}"), location);
+                None
+            }
+            None => None,
+        }
     }
 
     fn parse_break(&mut self, node: Node<'_, '_>, location: &str) -> Element {

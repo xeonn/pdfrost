@@ -10,7 +10,7 @@ The page on screen is always PDF bytes from `render`. The UI does not interpret 
 
 ## Designer
 
-The Design tab is still a shell. The plan is in [Designer](designer.md): a Jaspersoft Studio-shaped band editor for the supported subset, editing the engine’s `Report` and saving with `write_report`. Preview still calls the same render command. Charts, images, subreports, and other unsupported tags stay off the canvas.
+The Design tab is still a shell. The plan is in [Designer](designer.md): a Jaspersoft Studio-shaped band editor for the supported subset, editing the engine’s `Report` and saving with `write_report`. Preview still calls the same render command. Subreports and other unsupported tags stay off the canvas.
 
 ## Shared rule
 

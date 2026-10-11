@@ -7,6 +7,7 @@ withDefaults(
       | "layers"
       | "type"
       | "field"
+      | "image"
       | "minus"
       | "square"
       | "table"
@@ -63,6 +64,12 @@ withDefaults(
       stroke-linecap="round"
       stroke-linejoin="round"
       d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"
+    />
+    <path
+      v-else-if="name === 'image'"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91M3.75 19.5h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zM8.25 8.25h.008v.008H8.25V8.25z"
     />
     <path
       v-else-if="name === 'minus'"

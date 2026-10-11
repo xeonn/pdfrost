@@ -42,8 +42,9 @@ fn render_report(template_path: String, document_path: Option<String>) -> Result
         }
         None => serde_json::json!({}),
     };
-    let output =
-        pdfrost_engine::render(&template, &document, Utc::now()).map_err(|err| err.to_string())?;
+    let asset_dir = std::path::Path::new(&template_path).parent();
+    let output = pdfrost_engine::render_with_assets(&template, &document, Utc::now(), asset_dir)
+        .map_err(|err| err.to_string())?;
     Ok(Rendered {
         pdf: output.pdf,
         warnings: warning_dtos(output.warnings),
@@ -77,6 +78,63 @@ fn write_template(path: String, contents: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn read_image(template_path: String, source: String) -> Result<String, String> {
+    let root = std::path::Path::new(&template_path).parent();
+    let bytes = pdfrost_engine::read_image_bytes(&source, root)
+        .ok_or_else(|| format!("could not read {source}"))?;
+    Ok(format!("data:{};base64,{}", image_mime(&bytes), base64(&bytes)))
+}
+
+fn image_mime(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        "image/png"
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        "image/jpeg"
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        "image/gif"
+    } else if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else {
+        "application/octet-stream"
+    }
+}
+
+fn base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    let mut index = 0;
+    while index + 3 <= bytes.len() {
+        let value = ((bytes[index] as u32) << 16)
+            | ((bytes[index + 1] as u32) << 8)
+            | bytes[index + 2] as u32;
+        out.push(TABLE[((value >> 18) & 63) as usize] as char);
+        out.push(TABLE[((value >> 12) & 63) as usize] as char);
+        out.push(TABLE[((value >> 6) & 63) as usize] as char);
+        out.push(TABLE[(value & 63) as usize] as char);
+        index += 3;
+    }
+    if index < bytes.len() {
+        let first = bytes[index] as u32;
+        let second = if index + 1 < bytes.len() {
+            bytes[index + 1] as u32
+        } else {
+            0
+        };
+        let value = (first << 16) | (second << 8);
+        out.push(TABLE[((value >> 18) & 63) as usize] as char);
+        out.push(TABLE[((value >> 12) & 63) as usize] as char);
+        if index + 1 < bytes.len() {
+            out.push(TABLE[((value >> 6) & 63) as usize] as char);
+            out.push('=');
+        } else {
+            out.push('=');
+            out.push('=');
+        }
+    }
+    out
+}
+
+#[tauri::command]
 fn load_report(path: String) -> Result<pdfrost_engine::Report, String> {
     let template = std::fs::read_to_string(&path)
         .map_err(|err| format!("could not read the template: {err}"))?;
@@ -102,7 +160,8 @@ pub fn run() {
             read_template,
             write_template,
             load_report,
-            save_report
+            save_report,
+            read_image
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

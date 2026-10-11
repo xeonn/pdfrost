@@ -99,12 +99,15 @@ const loadWarnings = ref<Warning[]>([]);
 const lossyConfirmed = ref(true);
 const confirmedPaths = new Set<string>();
 const savedSnapshot = ref("");
+const imagePreviews = ref<Record<string, string>>({});
+let imagePreviewTicket = 0;
 const undoStack = ref<string[]>([]);
 const editing = ref<{ band: number; index: number } | null>(null);
 const textDraft = ref("");
-const palette: { id: Tool; label: string; icon: "type" | "field" | "minus" | "square" | "table" }[] = [
+const palette: { id: Tool; label: string; icon: "type" | "field" | "image" | "minus" | "square" | "table" }[] = [
   { id: "staticText", label: "Static Text", icon: "type" },
   { id: "textField", label: "Text Field", icon: "field" },
+  { id: "image", label: "Image", icon: "image" },
   { id: "line", label: "Line", icon: "minus" },
   { id: "rectangle", label: "Rectangle", icon: "square" },
   { id: "table", label: "Table", icon: "table" },
@@ -1138,6 +1141,95 @@ function borderStyle(element: Element): Record<string, string> {
   };
 }
 
+function quotedImageSource(expression: string): string {
+  const trimmed = expression.trim();
+  if (trimmed.length < 2 || !trimmed.startsWith('"') || !trimmed.endsWith('"')) {
+    return "";
+  }
+  return trimmed.slice(1, -1);
+}
+
+function imageObjectStyle(element: Element): Record<string, string> {
+  if (element.type !== "image") {
+    return {};
+  }
+  const scale = element.scaleImage ?? "retainShape";
+  const fit = scale === "fillFrame" ? "fill" : scale === "clip" ? "none" : "contain";
+  const horizontal = element.hAlign === "center" ? "center" : element.hAlign === "right" ? "right" : "left";
+  const vertical = element.vAlign === "middle" ? "center" : element.vAlign === "bottom" ? "bottom" : "top";
+  const deg = element.rotation === "left" ? -90 : element.rotation === "right" ? 90 : element.rotation === "upsideDown" ? 180 : 0;
+  return {
+    objectFit: fit,
+    objectPosition: `${horizontal} ${vertical}`,
+    transform: deg ? `rotate(${deg}deg)` : "none",
+  };
+}
+
+function quotedImageSources(elements: Element[]): string[] {
+  const found: string[] = [];
+  for (const element of elements) {
+    if (element.type === "image") {
+      const source = quotedImageSource(element.expression);
+      if (source) {
+        found.push(source);
+      }
+    }
+    if (element.type === "table") {
+      for (const column of element.columns) {
+        for (const section of column.sections) {
+          found.push(...quotedImageSources(section.elements));
+        }
+      }
+    }
+  }
+  return found;
+}
+
+function imagePreview(element: Element): string {
+  if (element.type !== "image") {
+    return "";
+  }
+  const source = quotedImageSource(element.expression);
+  return source ? (imagePreviews.value[source] ?? "") : "";
+}
+
+async function loadImagePreviews(): Promise<void> {
+  const ticket = ++imagePreviewTicket;
+  const sources = new Set(quotedImageSources((report.value?.bands ?? []).flatMap((band) => band.elements)));
+  const next: Record<string, string> = {};
+  await Promise.all(
+    [...sources].map(async (source) => {
+      if (/^https?:\/\//i.test(source) || source.startsWith("data:")) {
+        next[source] = source;
+        return;
+      }
+      if (!props.templatePath) {
+        next[source] = "";
+        return;
+      }
+      try {
+        next[source] = await invoke<string>("read_image", {
+          templatePath: props.templatePath,
+          source,
+        });
+      } catch {
+        next[source] = "";
+      }
+    }),
+  );
+  if (ticket === imagePreviewTicket) {
+    imagePreviews.value = next;
+  }
+}
+
+function commitImageExpression(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.startsWith('"') || trimmed.startsWith("$") || trimmed.includes("(")) {
+    return trimmed;
+  }
+  return `"${trimmed.replaceAll('"', "")}"`;
+}
+
 function fillStyle(element: Element): Record<string, string> {
   if (element.type === "ellipse" || element.element.mode !== "opaque") {
     return {};
@@ -1529,6 +1621,23 @@ watch(
     void load();
   },
   { immediate: true },
+);
+
+watch(
+  () =>
+    (report.value?.bands ?? [])
+      .flatMap((band) => band.elements)
+      .flatMap((element) =>
+        element.type === "image"
+          ? [element.expression]
+          : element.type === "table"
+            ? element.columns.flatMap((column) => column.sections.flatMap((section) => section.elements.filter((child) => child.type === "image").map((child) => child.expression)))
+            : [],
+      )
+      .join("\n") + props.templatePath,
+  () => {
+    void loadImagePreviews();
+  },
 );
 
 watch(
@@ -1978,7 +2087,17 @@ onBeforeUnmount(() => {
                             @pointerdown.stop
                             @click.stop="selectCell(row.index, index, columnIndex, kind, elementIndex)"
                           >
-                            <div class="h-full w-full overflow-hidden" :style="textFrameStyle()">
+                            <img
+                              v-if="child.type === 'image' && imagePreview(child)"
+                              :src="imagePreview(child)"
+                              alt=""
+                              class="h-full w-full"
+                              :style="imageObjectStyle(child)"
+                            />
+                            <div v-else-if="child.type === 'image'" class="flex h-full items-center justify-center overflow-hidden px-1 text-center text-[9px] text-slate-500">
+                              {{ child.expression || "Image" }}
+                            </div>
+                            <div v-else class="h-full w-full overflow-hidden" :style="textFrameStyle()">
                               <div :style="textRotateStyle(child)">
                                 <span :style="textContentStyle(child)"><template v-for="(piece, pieceIndex) in textPieces(child)" :key="pieceIndex"><span :style="piece.style">{{ piece.text }}</span></template></span>
                               </div>
@@ -2031,6 +2150,18 @@ onBeforeUnmount(() => {
                 <template v-else-if="element.type === 'chart'">
                   <div class="flex h-full items-center justify-center bg-slate-200 text-xs text-slate-600">
                     {{ element.kind }}
+                  </div>
+                </template>
+                <template v-else-if="element.type === 'image'">
+                  <img
+                    v-if="imagePreview(element)"
+                    :src="imagePreview(element)"
+                    alt=""
+                    class="h-full w-full"
+                    :style="imageObjectStyle(element)"
+                  />
+                  <div v-else class="flex h-full items-center justify-center overflow-hidden px-1 text-center text-[10px] leading-tight text-slate-500">
+                    {{ element.expression || "Image" }}
                   </div>
                 </template>
                 <div v-else class="h-full w-full overflow-hidden" :style="textFrameStyle()">
@@ -2379,6 +2510,109 @@ onBeforeUnmount(() => {
                 <input :class="inputClass" type="number" :value="editedElement.element.height" @change="commitNumber(($event.target as HTMLInputElement).value, (value) => { if (editedElement) { editedElement.element.height = value; clampEdited(editedElement.element); } })" />
               </label>
             </div>
+
+            <template v-if="editedElement.type === 'image'">
+              <label class="block text-xs text-gray-400">
+                Image expression
+                <input
+                  :class="inputClass"
+                  :value="editedElement.expression"
+                  placeholder='"logo.png" or $F{logo}'
+                  @change="edit(() => { if (editedElement?.type === 'image') editedElement.expression = commitImageExpression(($event.target as HTMLInputElement).value); })"
+                />
+              </label>
+              <label class="block text-xs text-gray-400">
+                Expression class
+                <input
+                  :class="inputClass"
+                  :value="editedElement.expressionClass ?? ''"
+                  placeholder="java.lang.String"
+                  @change="edit(() => { if (editedElement?.type === 'image') editedElement.expressionClass = ($event.target as HTMLInputElement).value.trim() || null; })"
+                />
+              </label>
+              <label class="block text-xs text-gray-400">
+                Scale
+                <select :class="inputClass" :value="editedElement.scaleImage ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.scaleImage = (($event.target as HTMLSelectElement).value || null) as typeof editedElement.scaleImage; })">
+                  <option value="">Retain shape</option>
+                  <option value="clip">Clip</option>
+                  <option value="fillFrame">Fill frame</option>
+                  <option value="retainShape">Retain shape</option>
+                  <option value="realHeight">Real height</option>
+                  <option value="realSize">Real size</option>
+                </select>
+              </label>
+              <div class="grid grid-cols-2 gap-2">
+                <label class="text-xs text-gray-400">
+                  Horizontal
+                  <select :class="inputClass" :value="editedElement.hAlign ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.hAlign = (($event.target as HTMLSelectElement).value || null) as typeof editedElement.hAlign; })">
+                    <option value="">Left</option>
+                    <option value="left">Left</option>
+                    <option value="center">Center</option>
+                    <option value="right">Right</option>
+                  </select>
+                </label>
+                <label class="text-xs text-gray-400">
+                  Vertical
+                  <select :class="inputClass" :value="editedElement.vAlign ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.vAlign = (($event.target as HTMLSelectElement).value || null) as typeof editedElement.vAlign; })">
+                    <option value="">Top</option>
+                    <option value="top">Top</option>
+                    <option value="middle">Middle</option>
+                    <option value="bottom">Bottom</option>
+                  </select>
+                </label>
+              </div>
+              <label class="block text-xs text-gray-400">
+                On error
+                <select :class="inputClass" :value="editedElement.onErrorType ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.onErrorType = (($event.target as HTMLSelectElement).value || null) as typeof editedElement.onErrorType; })">
+                  <option value="">Error</option>
+                  <option value="error">Error</option>
+                  <option value="blank">Blank</option>
+                  <option value="icon">Icon</option>
+                </select>
+              </label>
+              <label class="block text-xs text-gray-400">
+                Evaluation
+                <select :class="inputClass" :value="editedElement.evaluationTime ?? ''" @change="edit(() => { if (editedElement?.type === 'image') { editedElement.evaluationTime = ($event.target as HTMLSelectElement).value || null; if (editedElement.evaluationTime !== 'Group') editedElement.evaluationGroup = null; } })">
+                  <option value="">Now</option>
+                  <option value="Now">Now</option>
+                  <option value="Report">Report</option>
+                  <option value="Page">Page</option>
+                  <option value="Column">Column</option>
+                  <option value="Group">Group</option>
+                  <option value="Band">Band</option>
+                  <option value="Auto">Auto</option>
+                </select>
+              </label>
+              <label v-if="editedElement.evaluationTime === 'Group'" class="block text-xs text-gray-400">
+                Evaluation group
+                <input :class="inputClass" :value="editedElement.evaluationGroup ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.evaluationGroup = ($event.target as HTMLInputElement).value || null; })" />
+              </label>
+              <label class="flex items-center gap-2 text-xs text-gray-300">
+                <input
+                  type="checkbox"
+                  :checked="!!editedElement.lazy"
+                  @change="edit(() => { if (editedElement?.type === 'image') editedElement.lazy = ($event.target as HTMLInputElement).checked; })"
+                />
+                Lazy
+              </label>
+              <label class="block text-xs text-gray-400">
+                Cache
+                <select :class="inputClass" :value="editedElement.usingCache === true ? 'true' : editedElement.usingCache === false ? 'false' : ''" @change="edit(() => { if (editedElement?.type === 'image') { const value = ($event.target as HTMLSelectElement).value; editedElement.usingCache = value === '' ? null : value === 'true'; } })">
+                  <option value="">Automatic</option>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </label>
+              <label class="block text-xs text-gray-400">
+                Rotation
+                <select :class="inputClass" :value="editedElement.rotation ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.rotation = (($event.target as HTMLSelectElement).value || null) as typeof editedElement.rotation; })">
+                  <option value="">None</option>
+                  <option value="left">Left</option>
+                  <option value="right">Right</option>
+                  <option value="upsideDown">Upside down</option>
+                </select>
+              </label>
+            </template>
 
             <template v-if="editedElement.type === 'staticText' || editedElement.type === 'textField'">
               <label v-if="editedElement.type === 'staticText'" class="block text-xs text-gray-400">
