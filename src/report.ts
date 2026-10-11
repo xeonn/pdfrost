@@ -193,14 +193,27 @@ export type Report = {
   warnings: Warning[];
 };
 
+/** JRXML element order. A new band is inserted here. */
 export const BAND_ORDER: BandKind[] = [
+  "background",
   "title",
   "pageHeader",
   "columnHeader",
   "detail",
-  "summary",
   "columnFooter",
   "pageFooter",
+  "summary",
+];
+
+/** Design canvas, top to bottom. Background is last, as in Jaspersoft Studio. */
+export const BAND_CANVAS: BandKind[] = [
+  "title",
+  "pageHeader",
+  "columnHeader",
+  "detail",
+  "columnFooter",
+  "pageFooter",
+  "summary",
   "background",
 ];
 

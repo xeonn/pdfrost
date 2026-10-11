@@ -6,7 +6,7 @@ import { FwbButton, FwbButtonGroup, FwbP } from "flowbite-vue";
 import Icon from "./Icon.vue";
 import {
   BAND_LABEL,
-  BAND_ORDER,
+  BAND_CANVAS,
   CHART_KINDS,
   SECTION_LABEL,
   type SectionKind,
@@ -97,8 +97,8 @@ const inspectorOpen = ref(true);
 const outlineWidth = ref(224);
 const inspectorWidth = ref(288);
 const dropBand = ref<number | null>(null);
-const SUMMARY_SLOT = -1;
-const SUMMARY_SLOT_HEIGHT = 48;
+const bandToAdd = ref<BandKind | "">("");
+const EMPTY_STRIP = 18;
 const DRAG_TOOL = "application/pdfrost-tool";
 const DRAG_FIELD = "application/pdfrost-field";
 const error = ref("");
@@ -144,31 +144,30 @@ const bandRows = computed(() => {
   if (!report.value) {
     return [];
   }
-  return BAND_ORDER.flatMap((kind) => {
+  return BAND_CANVAS.flatMap((kind) => {
     const index = report.value!.bands.findIndex((band) => band.kind === kind);
     return index < 0 ? [] : [{ index, band: report.value!.bands[index] }];
   });
 });
 const designedHeight = computed(() => {
-  const bands = bandRows.value.reduce((sum, row) => sum + row.band.height, 0);
+  const bands = bandRows.value.reduce((sum, row) => sum + stripHeight(row.band.height), 0);
   return topMargin.value + bands + bottomMargin.value;
 });
-const summaryMissing = computed(() => !!report.value && !report.value.bands.some((band) => band.kind === "summary"));
+const missingBands = computed(() => {
+  if (!report.value) {
+    return [];
+  }
+  const present = new Set(report.value.bands.map((band) => band.kind));
+  return BAND_CANVAS.filter((kind) => !present.has(kind));
+});
 const sheetHeight = computed(() => {
   if (!report.value) {
     return 0;
   }
-  const slot = summaryMissing.value ? SUMMARY_SLOT_HEIGHT : 0;
-  return Math.max(report.value.pageHeight, designedHeight.value + slot);
+  return Math.max(report.value.pageHeight, designedHeight.value);
 });
-const pageRemainder = computed(() => {
-  const slot = summaryMissing.value ? SUMMARY_SLOT_HEIGHT : 0;
-  return Math.max(0, sheetHeight.value - designedHeight.value - slot);
-});
-const pastPage = computed(() => {
-  const slot = summaryMissing.value ? SUMMARY_SLOT_HEIGHT : 0;
-  return !!report.value && designedHeight.value + slot > report.value.pageHeight;
-});
+const pageRemainder = computed(() => Math.max(0, sheetHeight.value - designedHeight.value));
+const pastPage = computed(() => !!report.value && designedHeight.value > report.value.pageHeight);
 const selectedBand = computed(() => {
   if (!report.value || selection.value.kind !== "band") {
     return null;
@@ -184,14 +183,14 @@ const bandMonitor = computed(() => {
     if (row.index === selection.value.index) {
       break;
     }
-    start += row.band.height;
+    start += stripHeight(row.band.height);
   }
-  const end = start + selectedBand.value.height;
+  const end = start + stripHeight(selectedBand.value.height);
   const pageEdge = report.value.pageHeight;
   const contentLimit = Math.max(0, pageEdge - topMargin.value - bottomMargin.value);
   const stack = bandRows.value
     .filter((row) => row.band.kind !== "background")
-    .reduce((sum, row) => sum + row.band.height, 0);
+    .reduce((sum, row) => sum + stripHeight(row.band.height), 0);
   return {
     start,
     end,
@@ -552,6 +551,10 @@ function bandLabel(kind: string): string {
   return BAND_LABEL[kind as BandKind] ?? kind;
 }
 
+function stripHeight(height: number): number {
+  return height > 0 ? height : EMPTY_STRIP;
+}
+
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -713,19 +716,16 @@ function toolFromDrop(transfer: DataTransfer | null): Tool | null {
   return palette.some((item) => item.id === id) ? (id as Tool) : null;
 }
 
-function summarySlotAfter(rowIndex: number): boolean {
-  if (!summaryMissing.value) {
-    return false;
+function addBand(): void {
+  if (!report.value || !bandToAdd.value) {
+    return;
   }
-  const row = bandRows.value[rowIndex];
-  const next = bandRows.value[rowIndex + 1];
-  if (!row) {
-    return false;
-  }
-  const summaryOrder = BAND_ORDER.indexOf("summary");
-  const rowOrder = BAND_ORDER.indexOf(row.band.kind);
-  const nextOrder = next ? BAND_ORDER.indexOf(next.band.kind) : BAND_ORDER.length;
-  return rowOrder < summaryOrder && nextOrder > summaryOrder;
+  const kind = bandToAdd.value;
+  edit(() => {
+    const index = ensureBand(report.value!, kind);
+    selection.value = { kind: "band", index };
+  });
+  bandToAdd.value = "";
 }
 
 function onFieldDragStart(event: DragEvent, name: string): void {
@@ -786,64 +786,6 @@ function onBandDrop(event: DragEvent, bandIndex: number): void {
     selection.value = { kind: "element", band: bandIndex, index };
     tool.value = null;
   });
-}
-
-function placeOnSummary(x: number, y: number, armed: Tool | null, fieldName: string): void {
-  if (!report.value || (!armed && !fieldName)) {
-    return;
-  }
-  edit(() => {
-    const bandIndex = ensureBand(report.value!, "summary");
-    const index = armed
-      ? placeElement(report.value!, bandIndex, armed, x, y)
-      : fieldName
-        ? placeField(report.value!, bandIndex, fieldName, x, y)
-        : null;
-    if (index === null) {
-      if (armed === "table") {
-        error.value = "Tables go on the Detail band.";
-      }
-      return;
-    }
-    error.value = "";
-    selection.value = { kind: "element", band: bandIndex, index };
-    tool.value = null;
-  });
-}
-
-function onSummaryDragOver(event: DragEvent): void {
-  if (!event.dataTransfer) {
-    return;
-  }
-  event.preventDefault();
-  event.dataTransfer.dropEffect = "copy";
-  dropBand.value = SUMMARY_SLOT;
-}
-
-function onSummaryDrop(event: DragEvent): void {
-  event.preventDefault();
-  dropBand.value = null;
-  const content = (event.currentTarget as HTMLElement).querySelector("[data-band-content]");
-  const bounds = (content instanceof HTMLElement ? content : (event.currentTarget as HTMLElement)).getBoundingClientRect();
-  placeOnSummary(
-    (event.clientX - bounds.left) / scale.value,
-    (event.clientY - bounds.top) / scale.value,
-    toolFromDrop(event.dataTransfer),
-    event.dataTransfer?.getData(DRAG_FIELD) ?? "",
-  );
-}
-
-function onSummaryClick(event: MouseEvent): void {
-  if (!tool.value) {
-    return;
-  }
-  const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  placeOnSummary(
-    (event.clientX - bounds.left) / scale.value,
-    (event.clientY - bounds.top) / scale.value,
-    tool.value,
-    "",
-  );
 }
 
 function onBandClick(event: MouseEvent, bandIndex: number): void {
@@ -1090,6 +1032,13 @@ function removeSelected(): void {
     return;
   }
   const current = selection.value;
+  if (current.kind === "band") {
+    edit(() => {
+      report.value!.bands.splice(current.index, 1);
+    });
+    selection.value = { kind: "report" };
+    return;
+  }
   if (current.kind === "element") {
     edit(() => {
       report.value!.bands[current.band].elements.splice(current.index, 1);
@@ -2050,6 +1999,21 @@ onBeforeUnmount(() => {
               </template>
             </template>
           </template>
+          <label v-if="missingBands.length" class="mt-3 block px-2 text-xs text-gray-500">
+            Add band
+            <select v-model="bandToAdd" :class="inputClass" class="mt-1">
+              <option value="">Choose</option>
+              <option v-for="kind in missingBands" :key="kind" :value="kind">{{ bandLabel(kind) }}</option>
+            </select>
+          </label>
+          <button
+            v-if="bandToAdd"
+            type="button"
+            class="mt-1 flex w-full rounded-md px-2 py-1 text-left text-gray-300 hover:bg-slate-800"
+            @click="addBand"
+          >
+            Add {{ bandLabel(bandToAdd) }}
+          </button>
         </nav>
       </aside>
 
@@ -2096,8 +2060,9 @@ onBeforeUnmount(() => {
           @pointerleave="pointer = null"
         >
           <div class="bg-slate-200" :style="{ height: `${topMargin}px` }" />
-          <template v-for="(row, rowIndex) in bandRows" :key="`canvas-${row.index}`">
           <div
+            v-for="row in bandRows"
+            :key="`canvas-${row.index}`"
             class="relative flex"
             :data-band-index="row.index"
             @click="tool ? undefined : select({ kind: 'band', index: row.index })"
@@ -2116,7 +2081,7 @@ onBeforeUnmount(() => {
                     ? 'bg-white ring-1 ring-inset ring-blue-300'
                     : 'bg-white'
               "
-              :style="{ width: `${columnWidth}px`, height: `${row.band.height}px`, ...gridStyle }"
+              :style="{ width: `${columnWidth}px`, height: `${stripHeight(row.band.height)}px`, ...gridStyle }"
               @click.stop="onBandClick($event, row.index)"
             >
               <div class="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
@@ -2320,28 +2285,6 @@ onBeforeUnmount(() => {
               />
             </div>
           </div>
-          <div
-            v-if="summarySlotAfter(rowIndex)"
-            class="relative flex"
-            @dragover="onSummaryDragOver"
-            @dragleave="onBandDragLeave($event, SUMMARY_SLOT)"
-            @drop="onSummaryDrop"
-          >
-            <div class="shrink-0 bg-slate-200" :style="{ width: `${leftMargin}px` }" />
-            <div
-              data-band-content
-              class="relative"
-              :class="dropBand === SUMMARY_SLOT ? 'bg-blue-50 ring-1 ring-inset ring-blue-300' : 'bg-white'"
-              :style="{ width: `${columnWidth}px`, height: `${SUMMARY_SLOT_HEIGHT}px`, ...gridStyle }"
-              @click.stop="onSummaryClick"
-            >
-              <div class="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-                <span class="select-none text-xs font-medium uppercase tracking-[0.18em] text-slate-400/70">Summary</span>
-              </div>
-            </div>
-            <div class="min-w-0 flex-1 bg-slate-200" />
-          </div>
-          </template>
           <div v-if="pageRemainder > 0" class="flex" :style="{ height: `${pageRemainder}px` }">
             <div class="shrink-0 bg-slate-200" :style="{ width: `${leftMargin}px` }" />
             <div class="min-w-0 flex-1 bg-white" />
@@ -2567,6 +2510,7 @@ onBeforeUnmount(() => {
             <p v-if="bandMonitor.floor > 0" class="text-xs text-gray-500">
               Height stays at least {{ Math.round(bandMonitor.floor) }} so the elements still fit.
             </p>
+            <FwbButton size="xs" color="red" @click="removeSelected">Remove band</FwbButton>
           </template>
 
           <template v-else-if="selection.kind === 'tableSection' && selectedTable && selectedTableSection">

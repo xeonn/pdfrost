@@ -41,7 +41,7 @@ Studio interactions to copy, in order:
 
 1. Click an element or its outline row to select it.
 2. Edit the selection in Properties. Studio uses a properties view, not a modal, for these fields.
-3. Choose a palette tool, then click a band to drop a default-size element (Static Text 100×20, Text Field 100×16, Image 50×50, Line 80×1, Rectangle 40×20, Chart 200×200). Dragging a tool from the palette onto a band does the same. A report with no Summary band shows a Summary strip between Detail and Page Footer. Dropping there creates the band. The white space under the last band is unused page and does not take a drop.
+3. Choose a palette tool, then click a band to drop a default-size element (Static Text 100×20, Text Field 100×16, Image 50×50, Line 80×1, Rectangle 40×20, Chart 200×200). Dragging a tool from the palette onto a band does the same. Every band in this subset is optional. The canvas and outline show only the bands the report has, top to bottom: Title, Page Header, Column Header, Detail, Column Footer, Page Footer, Summary, Background. Add a missing one from the outline. It starts at height 0, as a thin strip, and Delete removes it. The white space under the last band is unused page and does not take a drop.
 4. Drag inside the band to move. Drag a handle to resize. Keep the element inside the band: clamp `x`/`y` to the column width and the band height.
 5. Drag the band bar to set the band height. The height cannot shrink below the lowest element’s `y + height`.
 6. Double-click static text to edit the string on the canvas. A text field’s expression stays in Properties, as a short field, with the known fields offered as `$F{name}`.
