@@ -2,7 +2,7 @@
 
 pdfrost turns a [JasperReports](https://github.com/Jaspersoft/jasperreports) `.jrxml` template and one JSON document into a PDF. JasperReports 6.20.1 is the behavior reference for the tags this subset implements. The same engine is a Rust crate, a Go module, and a desktop app.
 
-The caller supplies the template and the data. pdfrost does not open a database and does not evaluate arbitrary Java.
+JSON is the data source. The caller supplies the template and one JSON object. `$F{name}` reads a property of that object. A database connection is not part of this subset, and one is not planned. pdfrost does not evaluate arbitrary Java.
 
 | Caller | How |
 | --- | --- |
@@ -109,7 +109,7 @@ bun install
 bun run tauri dev
 ```
 
-`bun run tauri build` produces a release bundle. The window opens a `.jrxml` file, edits the supported subset, and previews the PDF from the same engine.
+`bun run tauri build` produces a release bundle. Opening a `.jrxml` file starts on Design. The window edits the supported subset there and previews the PDF from the same engine. Preview fills from a JSON document.
 
 ## Repository
 

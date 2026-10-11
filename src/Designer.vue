@@ -736,29 +736,52 @@ function onFieldDragStart(event: DragEvent, name: string): void {
   }
 }
 
-function onBandDragOver(event: DragEvent, bandIndex: number): void {
+function bandAtPoint(clientX: number, clientY: number): { index: number; x: number; y: number } | null {
+  const root = sheetEl.value;
+  if (!root) {
+    return null;
+  }
+  for (const row of root.querySelectorAll<HTMLElement>("[data-band-index]")) {
+    const content = row.querySelector<HTMLElement>("[data-band-content]") ?? row;
+    const bounds = content.getBoundingClientRect();
+    if (clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom) {
+      continue;
+    }
+    const index = Number(row.dataset.bandIndex);
+    if (!Number.isInteger(index)) {
+      return null;
+    }
+    return {
+      index,
+      x: (clientX - bounds.left) / scale.value,
+      y: (clientY - bounds.top) / scale.value,
+    };
+  }
+  return null;
+}
+
+function onCanvasDragOver(event: DragEvent): void {
   if (!event.dataTransfer) {
     return;
   }
   event.preventDefault();
   event.dataTransfer.dropEffect = "copy";
-  dropBand.value = bandIndex;
+  dropBand.value = bandAtPoint(event.clientX, event.clientY)?.index ?? null;
 }
 
-function onBandDragLeave(event: DragEvent, bandIndex: number): void {
+function onCanvasDragLeave(event: DragEvent): void {
   const next = event.relatedTarget as Node | null;
   if (next && (event.currentTarget as HTMLElement).contains(next)) {
     return;
   }
-  if (dropBand.value === bandIndex) {
-    dropBand.value = null;
-  }
+  dropBand.value = null;
 }
 
-function onBandDrop(event: DragEvent, bandIndex: number): void {
+function onCanvasDrop(event: DragEvent): void {
   event.preventDefault();
+  const hit = bandAtPoint(event.clientX, event.clientY);
   dropBand.value = null;
-  if (!report.value) {
+  if (!hit || !report.value) {
     return;
   }
   const fieldName = event.dataTransfer?.getData(DRAG_FIELD) ?? "";
@@ -766,15 +789,11 @@ function onBandDrop(event: DragEvent, bandIndex: number): void {
   if (!armed && !fieldName) {
     return;
   }
-  const content = (event.currentTarget as HTMLElement).querySelector("[data-band-content]");
-  const bounds = (content instanceof HTMLElement ? content : (event.currentTarget as HTMLElement)).getBoundingClientRect();
-  const x = (event.clientX - bounds.left) / scale.value;
-  const y = (event.clientY - bounds.top) / scale.value;
   edit(() => {
     const index = armed
-      ? placeElement(report.value!, bandIndex, armed, x, y)
+      ? placeElement(report.value!, hit.index, armed, hit.x, hit.y)
       : fieldName
-        ? placeField(report.value!, bandIndex, fieldName, x, y)
+        ? placeField(report.value!, hit.index, fieldName, hit.x, hit.y)
         : null;
     if (index === null) {
       if (armed === "table") {
@@ -783,7 +802,7 @@ function onBandDrop(event: DragEvent, bandIndex: number): void {
       return;
     }
     error.value = "";
-    selection.value = { kind: "element", band: bandIndex, index };
+    selection.value = { kind: "element", band: hit.index, index };
     tool.value = null;
   });
 }
@@ -2048,6 +2067,9 @@ onBeforeUnmount(() => {
         ref="stageEl"
         class="min-w-0 flex-1 overflow-auto bg-slate-900 p-6"
         @scroll="syncRulers"
+        @dragover="onCanvasDragOver"
+        @dragleave="onCanvasDragLeave"
+        @drop="onCanvasDrop"
         @click="tool ? undefined : select({ kind: 'report' })"
       >
         <div :style="{ width: `${canvasWidth * scale}px`, height: `${sheetHeight * scale}px` }">
@@ -2066,9 +2088,6 @@ onBeforeUnmount(() => {
             class="relative flex"
             :data-band-index="row.index"
             @click="tool ? undefined : select({ kind: 'band', index: row.index })"
-            @dragover="onBandDragOver($event, row.index)"
-            @dragleave="onBandDragLeave($event, row.index)"
-            @drop="onBandDrop($event, row.index)"
           >
             <div class="shrink-0 bg-slate-200" :style="{ width: `${leftMargin}px` }" />
             <div

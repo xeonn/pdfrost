@@ -96,7 +96,7 @@ async function chooseTemplate(): Promise<void> {
   }
   templatePath.value = picked;
   documentPath.value = "";
-  mode.value = "preview";
+  mode.value = "design";
   await render();
 }
 
