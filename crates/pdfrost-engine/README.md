@@ -1,6 +1,12 @@
 # pdfrost-engine
 
-Rust library that reads a JRXML template, fills it from one JSON document, and returns PDF bytes. JasperReports 6.20.1 is the behavior reference for the supported tags. The tag list is in [docs/jrxml-subset.md](../../docs/jrxml-subset.md).
+This is the Rust library behind pdfrost. Give it a report template and one JSON object, and it gives back a PDF.
+
+The JSON object is the data. A text field reads one value from it, such as a company name. A table or a chart can walk a list inside it and print one row, or one point, for each entry. pdfrost does not open a database connection, and one is not planned.
+
+This library is the small piece another Rust program embeds when it needs to print a receipt, an invoice, or a statement. That program already has the page design and the details of one document as JSON. The call returns a PDF, with no window and no database. The samples are that kind of paperwork: a goods receipt, a shipment, a stock adjustment, and transfers between branches, locators, and warehouses. For a full reporting server, with a shared catalog, schedules, and database queries, use the JasperReports suite.
+
+For the pieces it supports, the behavior follows JasperReports 6.20.1. The list is in [docs/jrxml-subset.md](../../docs/jrxml-subset.md).
 
 ## Dependency
 
@@ -19,7 +25,7 @@ From a crate inside this workspace:
 pdfrost-engine = { path = "../pdfrost-engine" }
 ```
 
-The library target is `pdfrost_engine`. Rust 1.92 or newer is required.
+The library name in Rust is `pdfrost_engine`. Rust 1.92 or newer is required.
 
 ## Render
 
@@ -49,17 +55,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | Argument | Meaning |
 | --- | --- |
-| `template` | The `.jrxml` text. |
-| `document` | One JSON object. `$F{name}` reads a property. A table `subDataSource("itemsList")` repeats over the array `itemsList`. |
-| `Utc::now()` | The instant printed for `new java.util.Date()`, as `YYYY-MM-DD HH:MM:SS` in UTC. Pass any `DateTime<Utc>` to fix that clock. |
+| `template` | The text of the `.jrxml` file. |
+| `document` | One JSON object. This is the data. `$F{CompanyName}` prints `Northwind Traders`. A table aimed at `itemsList` prints one row for A-1. |
+| `Utc::now()` | The date and time printed when the template asks for the current time. It is shown in UTC, for example `2026-10-12 00:00:00`. Pass any `DateTime<Utc>` to use a fixed clock. |
 
-`output.pdf` is the file bytes. `output.warnings` names unsupported tags, unsupported expressions, and missing fields. `output.placements` is one box per drawn element, in PDF points from the top-left of the page.
+`output.pdf` is the file. `output.warnings` names anything the template asked for that pdfrost skipped, including a missing value. `output.placements` is where each piece landed on the page, measured in points from the top-left corner.
 
-`Err` means there is no PDF. That happens when the XML cannot be read, the root is not `jasperReport`, or the page size is not positive. A warning by itself is still `Ok`.
+If the call returns an error, there is no PDF. That happens when the template cannot be read, the file is not a report, or the page size is missing. A warning on its own still returns a PDF.
 
-## Parse and write
+## Read and save a template
 
-`parse` turns JRXML into a `Report` without drawing it. `write_report` writes that report back to JRXML for the supported subset. Round-tripping drops tags the subset does not store.
+`parse` reads a template into a form the desktop app can edit, without drawing it. `write_report` saves that form back to a `.jrxml` file. Saving keeps the pieces pdfrost supports. Anything else in the original file is left out.
 
 ```rust
 let report = pdfrost_engine::parse(template)?;

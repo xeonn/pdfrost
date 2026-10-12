@@ -1,16 +1,57 @@
 # pdfrost
 
-pdfrost turns a [JasperReports](https://github.com/Jaspersoft/jasperreports) `.jrxml` template and one JSON document into a PDF. JasperReports 6.20.1 is the behavior reference for the tags this subset implements. The same engine is a Rust crate, a Go module, and a desktop app.
+pdfrost makes a PDF from a report design and a JSON file.
 
-JSON is the data source. The caller supplies the template and one JSON object. `$F{name}` reads a property of that object. A database connection is not part of this subset, and one is not planned. pdfrost does not evaluate arbitrary Java.
+The design is a JasperReports template, a `.jrxml` file. The JSON file is the data: names and values such as a company name, a contact, or a list of line items. You do not connect pdfrost to a database. There is no database login, and one is not planned.
 
-| Caller | How |
+A text field such as `$F{CompanyName}` prints the company name from that JSON file. A table or a chart aimed at a list prints one row, or one point, for each entry in the list. A subreport is a second template. It uses the same JSON file: either the whole document, or one list inside it, such as `orders`.
+
+The same program is a Rust library, a Go package, and a desktop app. For the pieces it supports, it follows JasperReports 6.20.1. It does not run Java code written inside a template.
+
+## What it is good for
+
+The engine is a small tool you embed in another system when that system needs to print a receipt, an invoice, or a statement. The other system already has the page design as a JasperReports template and the details of that one document as a JSON file. pdfrost fills the page and returns a PDF. It does not connect to a database.
+
+The samples in this repository are that kind of paperwork: a goods receipt, a shipment, a stock adjustment, and transfers between branches, locators, and warehouses. A Rust or Go program calls the engine and gets the PDF back, with no window of its own. The desktop app is for laying out the page and checking the printout.
+
+## Why a template
+
+The page and the program that prints it are two different jobs. The program knows the facts: the invoice number, the customer, the lines, the total. The page knows where those facts sit, what the headings say, and how the table looks. A template keeps the page in a file. The program only passes the JSON.
+
+If the layout is written into the program, a new heading, a moved logo, or an extra column is a code change. Someone has to edit the print routine, build the system again, and ship it. With a template, that same change is a save of the `.jrxml` file. The program that embeds the engine stays as it is. The next print uses the new page.
+
+One engine can print many documents this way. A receipt, an invoice, and a statement are three template files, not three print routines. The system keeps owning the data. The template keeps owning the paper.
+
+## What this project is not
+
+pdfrost is not a reporting server. It does not keep a shared catalog of reports, run them on a schedule, or give people a place to log in and browse them. For that, use the JasperReports suite. pdfrost is the piece another program calls when it only needs to print one document.
+
+It is not a database tool. It never logs in to a database, and a connection is not planned. It also does not run a query stored in the template. The caller hands over one JSON file for the receipt, invoice, or statement being printed.
+
+It is not the whole JasperReports product. The result is a PDF. It does not produce Excel, Word, or a web page, it does not run Java written inside the template, and it does not compile the template into a `.jasper` file. A chart type, barcode, or other piece outside the supported list is left off the page and named in a warning. The rest of the document still prints. If the template file itself cannot be read, there is no PDF. The supported pieces are listed in [docs/jrxml-subset.md](docs/jrxml-subset.md).
+
+The desktop app is not Jaspersoft Studio. It is a simpler editor for the pieces this engine can print, plus a preview of the PDF.
+
+## What you can do
+
+In the desktop app, opening a template starts on Design. From there you can:
+
+- Place text, a text field, a picture, a line, a box, a chart, a table, or a subreport
+- Add or remove the optional bands, such as the title and the page header
+- Point a text field at a name in the JSON file
+- Repeat a table for each item in a list
+- Drop in another template as a subreport, then pick the list it should repeat from a view of the JSON file
+- Switch to Preview and read the PDF
+
+A chart can be a bar, line, or area chart, including the stacked forms. A picture is a file on your computer. A long subreport continues on the next page.
+
+To see this with the sample files, open `jrxmls/Subreport.jrxml`, then choose `jrxmls/SubreportData.json`. Preview is a two-page list of orders. Each order is drawn by `jrxmls/OrderLines.jrxml`, using the `orders` list in that JSON file.
+
+| Way to use it | Where |
 | --- | --- |
-| Rust | Crate [`pdfrost-engine`](crates/pdfrost-engine/README.md) |
-| Go | Module [`github.com/xeonn/pdfrost/go`](go/README.md) |
-| Desktop | Tauri app in this repository |
-
-A tag the subset does not draw is reported as a warning. The PDF still contains the supported content. A template that cannot be parsed returns an error and no PDF. The supported tags are listed in [docs/jrxml-subset.md](docs/jrxml-subset.md).
+| Rust | Library [`pdfrost-engine`](crates/pdfrost-engine/README.md) |
+| Go | Package [`github.com/xeonn/pdfrost/go`](go/README.md) |
+| Desktop | The app in this repository |
 
 ## Rust
 
@@ -44,9 +85,9 @@ fn main() {
 }
 ```
 
-`document` is one JSON object. `$F{CompanyName}` reads that property. A table bound with `subDataSource("itemsList")` repeats over the array of that name. `Utc::now()` is the instant printed for `new java.util.Date()`, formatted as `YYYY-MM-DD HH:MM:SS` in UTC.
+`document` is one JSON object, the same kind of file the desktop app opens. The time you pass in is what the report prints when the template asks for the current date and time. It is shown in UTC, for example `2026-10-12 00:00:00`.
 
-`parse` reads a template into a `Report`. `write_report` writes the supported subset back to JRXML. Details are in [crates/pdfrost-engine/README.md](crates/pdfrost-engine/README.md).
+`parse` reads a template so the app can edit it. `write_report` saves that edit back to a `.jrxml` file. Details are in [crates/pdfrost-engine/README.md](crates/pdfrost-engine/README.md).
 
 ## Go
 
@@ -54,7 +95,7 @@ fn main() {
 go get github.com/xeonn/pdfrost/go@v0.1.0
 ```
 
-The module is the `go/` directory, so the Git tag is `go/v0.1.0`. That tag is version `v0.1.0` of `github.com/xeonn/pdfrost/go`. The module zip includes a prebuilt `engine.wasm`. The program compiles the Go wrapper only. At runtime the wrapper runs that file with wazero. Cargo is not required.
+The module is the `go/` directory, so the Git tag is `go/v0.1.0`. That tag is version `v0.1.0` of `github.com/xeonn/pdfrost/go`. The download includes a ready-made copy of the engine. Building the Go program does not require Rust.
 
 ```go
 import (
@@ -78,18 +119,18 @@ func main() {
 }
 ```
 
-`document` must be a JSON object. The field and table rules match the Rust call. Details, the HTTP sample, and how to rebuild `engine.wasm` are in [go/README.md](go/README.md).
+`document` must be one JSON object, the same rule as the Rust call. Details, the small web sample, and when the packaged engine is refreshed are in [go/README.md](go/README.md).
 
 ## Examples in this repository
 
-Render a sample template to `sample.pdf`:
+Make a sample PDF named `sample.pdf`:
 
 ```bash
 cd examples/go-render
 go run .
 ```
 
-Serve `POST /render` and return a PDF download:
+Start a small web service that accepts a template and returns a PDF:
 
 ```bash
 cd examples/go-server
@@ -98,28 +139,28 @@ curl -sS -D - -o report.pdf --data-binary @../../jrxmls/Sample.jrxml \
   -H 'Content-Type: application/xml' http://127.0.0.1:8080/render
 ```
 
-Both examples use a `replace` directive so they build against `go/` in this checkout.
+Both examples are wired to the `go/` folder in this checkout, so they do not download a published version.
 
 ## Desktop app
 
-Requirements: Rust, Cargo, [Bun](https://bun.sh/) 1.4, and the platform webview toolchain (Xcode command-line tools on macOS).
+You need Rust, Cargo, [Bun](https://bun.sh/) 1.4, and the tools that build a desktop window (Xcode command-line tools on macOS).
 
 ```bash
 bun install
 bun run tauri dev
 ```
 
-`bun run tauri build` produces a release bundle. Opening a `.jrxml` file starts on Design. The window edits the supported subset there and previews the PDF from the same engine. Preview fills from a JSON document.
+`bun run tauri build` makes an installable app. Opening a `.jrxml` file starts on Design, where you edit the report. Preview shows the PDF. The values in that PDF come from a JSON file you choose. They do not come from a database.
 
 ## Repository
 
-| Path | Role |
+| Path | What it is |
 | --- | --- |
-| `crates/pdfrost-engine/` | Rust library. Parse, fill, layout, PDF. |
-| `crates/pdfrost-wasm/` | WebAssembly build copied to `go/engine.wasm`. |
-| `go/` | Go module `github.com/xeonn/pdfrost/go`. |
-| `examples/go-render/` | Command-line render. |
-| `examples/go-server/` | HTTP `POST /render`. |
-| `src-tauri/`, `src/` | Desktop shell and Vue interface. |
-| `jrxmls/` | Sample templates. |
-| `docs/` | Subset, pipeline, and design notes. |
+| `crates/pdfrost-engine/` | The Rust library that reads the template, fills it, and writes the PDF. |
+| `crates/pdfrost-wasm/` | The engine packaged so the Go module can run it. |
+| `go/` | The Go package `github.com/xeonn/pdfrost/go`. |
+| `examples/go-render/` | A command that writes one PDF. |
+| `examples/go-server/` | A small web service. Send it a template, and it returns a PDF. |
+| `src-tauri/`, `src/` | The desktop app. |
+| `jrxmls/` | Sample templates and the JSON files that fill them. |
+| `docs/` | Notes on what is supported and how the app is built. |

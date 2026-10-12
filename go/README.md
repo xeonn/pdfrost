@@ -1,6 +1,10 @@
 # github.com/xeonn/pdfrost/go
 
-Go wrapper around the pdfrost engine. Import this module, pass a JRXML template and one JSON object, and receive PDF bytes. Parsing and layout stay in the Rust engine. This package embeds a prebuilt `engine.wasm` and runs it with [wazero](https://github.com/tetratelabs/wazero).
+This is the Go package for pdfrost. Pass it a report template and one JSON object, and it returns a PDF.
+
+The JSON object is the data. pdfrost does not open a database connection, and one is not planned. A text field reads one value from the object. A table or a chart can walk a list inside it. The work of reading the template and laying out the page stays in the Rust engine. This package carries a ready-made copy of that engine and runs it with [wazero](https://github.com/tetratelabs/wazero).
+
+Use it from a Go service that needs to print a receipt, an invoice, or a statement. The service already has the page design and the details of one document as JSON, and the call returns a PDF. There is no window and no database connection. The samples are that kind of paperwork: a goods receipt, a shipment, a stock adjustment, and transfers between branches, locators, and warehouses. For a full reporting server, use the JasperReports suite.
 
 ## Install
 
@@ -22,7 +26,7 @@ require github.com/xeonn/pdfrost/go v0.0.0
 replace github.com/xeonn/pdfrost/go => ../../go
 ```
 
-`go build` compiles this package only. It does not run Cargo.
+`go build` compiles this package only. It does not build the Rust engine.
 
 ## Render
 
@@ -62,11 +66,11 @@ func main() {
 
 | Argument | Meaning |
 | --- | --- |
-| template | The `.jrxml` text. |
-| document | One JSON object. `$F{name}` reads a property. A table `subDataSource("itemsList")` repeats over the array `itemsList`. |
-| `time.Now().UTC()` | The instant printed for `new java.util.Date()`, as `YYYY-MM-DD HH:MM:SS` in UTC. |
+| template | The text of the `.jrxml` file. |
+| document | One JSON object. This is the data. `$F{CompanyName}` prints `Northwind Traders`. A table aimed at `itemsList` prints one row for A-1. |
+| `time.Now().UTC()` | The date and time printed when the template asks for the current time. It is shown in UTC, for example `2026-10-12 00:00:00`. |
 
-`result.PDF` is the file. `result.Warnings` lists unsupported tags, unsupported expressions, and missing fields. A warning does not fail the call. `err` is set when `document` is not JSON, or when the template cannot be parsed. There is no PDF in that case.
+`result.PDF` is the file. `result.Warnings` lists anything the template asked for that was skipped, including a missing value. A warning does not cancel the PDF. `err` is set when `document` is not JSON, or when the template cannot be read. There is no PDF in that case.
 
 ## Samples
 
@@ -86,17 +90,17 @@ curl -sS -D - -o report.pdf --data-binary @../../jrxmls/Sample.jrxml \
   -H 'Content-Type: application/xml' http://127.0.0.1:8080/render
 ```
 
-`POST /render` accepts the raw `.jrxml` body, a JSON body `{"template","data"}`, or multipart fields `template` and `data`. The response is `application/pdf` with `Content-Disposition: attachment`. Warnings are repeated in `X-Pdfrost-Warning`.
+`POST /render` accepts the template on its own, a JSON body with the template and the data together, or a form with fields named `template` and `data`. The response is a PDF download. Warnings are repeated in the `X-Pdfrost-Warning` header.
 
-## Tests and rebuilding the engine
+## Tests and the packaged engine
 
 ```bash
 cd go && go test ./...
 ```
 
-The test renders `jrxmls/Sample.jrxml` through the embedded wasm. The category charts are plotted from `chartPoints`, so the result does not carry a `chart` warning.
+The test fills `jrxmls/Sample.jrxml` through the packaged engine. The charts use the `chartPoints` list in the sample data, so that run does not warn about a chart.
 
-`go/engine.wasm` is updated only when a release of this module is planned. Engine changes on `development` do not refresh the embed. When that release is being prepared, rebuild the blob and commit it with the tag:
+`go/engine.wasm` is that packaged engine. It is replaced only when a release of this Go package is being prepared. Day-to-day engine changes do not refresh it. When a release is being prepared, rebuild the file and commit it with the tag:
 
 ```bash
 rustup target add wasm32-unknown-unknown
@@ -105,4 +109,4 @@ RUSTFLAGS="--remap-path-prefix=${HOME}/=" \
 cp target/wasm32-unknown-unknown/release/pdfrost_wasm.wasm go/engine.wasm
 ```
 
-The remap keeps the home directory of the machine that built the file out of panic text.
+The remap keeps the home directory of the machine that built the file out of error text.
