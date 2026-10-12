@@ -25,7 +25,7 @@ result, err := pdfrost.Render(templateXML, document, renderedAt)
 | Argument | Meaning |
 | --- | --- |
 | `templateXML` | The `.jrxml` text. |
-| `document` | One JSON object, the same document the Rust `render` function accepts. |
+| `document` | One JSON object. The Rust library also accepts a list of objects; this packaged engine does not, until it is replaced for a release. |
 | `renderedAt` | The UTC instant printed for `new java.util.Date()`. |
 
 `result.PDF` is the file bytes. `result.Warnings` lists unsupported tags and missing fields. `err` is set when the template is not readable JRXML. A warning alone does not set `err`.

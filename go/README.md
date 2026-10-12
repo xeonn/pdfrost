@@ -100,7 +100,7 @@ cd go && go test ./...
 
 The test fills `jrxmls/Sample.jrxml` through the packaged engine. The charts use the `chartPoints` list in the sample data, so that run does not warn about a chart.
 
-`go/engine.wasm` is that packaged engine. It is replaced only when a release of this Go package is being prepared. Day-to-day engine changes do not refresh it. When a release is being prepared, rebuild the file and commit it with the tag:
+`go/engine.wasm` is that packaged engine. It is replaced only when a release of this Go package is being prepared. Day-to-day engine changes do not refresh it. This packaged copy fills one JSON object. The Rust library and the desktop app also accept a list of objects and read it one object at a time. That list reaches this package when the packaged engine is replaced for a release. When a release is being prepared, rebuild the file and commit it with the tag:
 
 ```bash
 rustup target add wasm32-unknown-unknown

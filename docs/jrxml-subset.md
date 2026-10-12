@@ -123,7 +123,7 @@ These are not extra tags. They are fill and layout rules the files in `jrxmls/` 
 | Behavior | Rule in this subset |
 | --- | --- |
 | No `.jasper` compile step | JRXML is interpreted. Expressions are not compiled to Java bytecode. |
-| One main record | A JSON object is one record for the title, detail, and page bands. The engine does not iterate a query result for the main report. |
+| Main records | A JSON object is one record for the title, detail, and page bands. A JSON array is one record per element: detail repeats, the title sees the first element, and the summary sees the last. The engine does not run `queryString`. `render_read` reads a root array one element at a time. |
 | Default font | Samples set `size` and `isBold` and do not set `fontName`. JasperReports defaults PDF text to Helvetica; pdfrost embeds Liberation Sans (regular, bold, italic, and bold italic), a Helvetica-metric stand-in. `Helvetica`, `SansSerif`, `Arial`, `Liberation Sans`, and `DejaVu Sans` use that face. Any other `fontName` is kept, warned, and still drawn with Liberation Sans. |
 | Clip text | Text wraps inside the element box. A line break starts a new line. `Justified` spreads the words on a full line, and the last line of a paragraph stays left. Lines that do not fit the `reportElement` height are clipped. `isStretchWithOverflow="true"` grows that box to the text and grows the band. An element with `positionType="Float"` or `FixRelativeToBottom` moves down when an element above it stretches. |
 | Missing values | A missing field or a null JSON value prints blank and adds a warning. JasperReports would print the word `null` because these templates leave `isBlankWhenNull` unset. pdfrost does not. Comparisons with JasperReports must allow that difference. |

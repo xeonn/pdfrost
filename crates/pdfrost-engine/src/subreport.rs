@@ -93,21 +93,49 @@ pub(crate) fn locate(
     found
 }
 
-/// Records for one subreport fill.
+/// Records for one subreport fill. The values stay in the caller's document.
 ///
 /// No path fills the current object once. `.` is the document itself. A dotted
 /// path walks objects, and a numeric segment indexes an array. An array becomes
 /// one record per element. A missing path is an error.
-pub(crate) fn records(document: &Value, source: Option<&str>) -> Result<Vec<Value>, ()> {
+pub(crate) fn records<'a>(document: &'a Value, source: Option<&str>) -> Result<Records<'a>, ()> {
     let Some(path) = source.map(str::trim).filter(|path| !path.is_empty()) else {
-        return Ok(vec![document.clone()]);
+        return Ok(Records::One(document));
     };
     let Some(value) = at_path(document, path) else {
         return Err(());
     };
     match value {
-        Value::Array(items) => Ok(items.clone()),
-        other => Ok(vec![other.clone()]),
+        Value::Array(items) => Ok(Records::Many(items)),
+        other => Ok(Records::One(other)),
+    }
+}
+
+/// A borrowed view of the records a subreport fills.
+#[derive(Clone, Copy)]
+pub(crate) enum Records<'a> {
+    One(&'a Value),
+    Many(&'a [Value]),
+}
+
+impl<'a> Records<'a> {
+    pub(crate) fn is_empty(self) -> bool {
+        matches!(self, Records::Many(items) if items.is_empty())
+    }
+
+    pub(crate) fn len(self) -> usize {
+        match self {
+            Records::One(_) => 1,
+            Records::Many(items) => items.len(),
+        }
+    }
+
+    pub(crate) fn get(self, index: usize) -> Option<&'a Value> {
+        match self {
+            Records::One(value) if index == 0 => Some(value),
+            Records::One(_) => None,
+            Records::Many(items) => items.get(index),
+        }
     }
 }
 

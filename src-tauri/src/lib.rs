@@ -34,17 +34,21 @@ fn warning_dtos(warnings: Vec<pdfrost_engine::Warning>) -> Vec<WarningDto> {
 fn render_report(template_path: String, document_path: Option<String>) -> Result<Rendered, String> {
     let template = std::fs::read_to_string(&template_path)
         .map_err(|err| format!("could not read the template: {err}"))?;
-    let document = match document_path.as_deref().filter(|path| !path.is_empty()) {
-        Some(path) => {
-            let text = std::fs::read_to_string(path)
-                .map_err(|err| format!("could not read the document: {err}"))?;
-            serde_json::from_str(&text).map_err(|err| format!("the document is not JSON: {err}"))?
-        }
-        None => serde_json::json!({}),
-    };
     let asset_dir = std::path::Path::new(&template_path).parent();
-    let output = pdfrost_engine::render_with_assets(&template, &document, Utc::now(), asset_dir)
-        .map_err(|err| err.to_string())?;
+    let output = match document_path.as_deref().filter(|path| !path.is_empty()) {
+        Some(path) => {
+            let file = std::fs::File::open(path)
+                .map_err(|err| format!("could not read the document: {err}"))?;
+            pdfrost_engine::render_read_with_assets(&template, file, Utc::now(), asset_dir)
+        }
+        None => pdfrost_engine::render_with_assets(
+            &template,
+            &serde_json::json!({}),
+            Utc::now(),
+            asset_dir,
+        ),
+    }
+    .map_err(|err| err.to_string())?;
     Ok(Rendered {
         pdf: output.pdf,
         warnings: warning_dtos(output.warnings),

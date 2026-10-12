@@ -39,6 +39,7 @@ The engine is what other Rust programs embed. The Go package is what other Go pr
 
 - `Sample.jrxml` covers a title, column headings, text fields, a line, a rectangle, and one of each supported category chart. The charts plot `Units` and `Returns` from `chartPoints`.
 - `Subreport.jrxml` fills company and contact from `SubreportData.json` and repeats `OrderLines.jrxml` over `orders`. Each order prints its number and a table of `lines`.
+- `Receipts.jrxml` fills `Receipts.json`, a list of receipt objects. The detail band prints once per receipt, and the list runs onto a second page.
 - `Receive.jrxml`, `ShipmentOut.jrxml`, `StockAdjustment.jrxml`, `InterBranchTransfer.jrxml`, `InterLocatorTransfer.jrxml`, and `InterWarehouseTransfer.jrxml` are the operational forms: labels, fields, rules, boxes, a table fed from `itemsList`, a page number, and a printed-at time.
 
 A finished slice of the engine is one that renders the templates it claims, with a fixture, to a PDF that can be compared with JasperReports 6.20.1.
@@ -46,7 +47,7 @@ A finished slice of the engine is one that renders the templates it claims, with
 ## What this system does not do
 
 - Compile JRXML to a `.jasper` file, or compile expressions to Java bytecode.
-- Run a SQL or JSON query. The caller passes one JSON document.
+- Run a SQL or JSON query. The caller passes one JSON document, an object or a list of objects.
 - Open a database, a network service, or a window from the engine.
 - Evaluate general Java expressions, parameters, or resource-bundle keys.
 - Export any format other than PDF, or set PDF encryption, PDF/A, metadata, or bookmarks.

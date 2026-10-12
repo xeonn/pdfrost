@@ -1,8 +1,8 @@
 # pdfrost-engine
 
-This is the Rust library behind pdfrost. Give it a report template and one JSON object, and it gives back a PDF.
+This is the Rust library behind pdfrost. Give it a report template and JSON, and it gives back a PDF.
 
-The JSON object is the data. A text field reads one value from it, such as a company name. A table or a chart can walk a list inside it and print one row, or one point, for each entry. pdfrost does not open a database connection, and one is not planned.
+The JSON is the data. One object is one receipt, invoice, or statement. A list of objects prints the detail band once for each object, and `render_read` reads that list one object at a time. A text field reads one value, such as a company name. A table or a chart can walk a list inside an object and print one row, or one point, for each entry. pdfrost does not open a database connection, and one is not planned.
 
 This library is the small piece another Rust program embeds when it needs to print a receipt, an invoice, or a statement. That program already has the page design and the details of one document as JSON. The call returns a PDF, with no window and no database. The samples are that kind of paperwork: a goods receipt, a shipment, a stock adjustment, and transfers between branches, locators, and warehouses. For a full reporting server, with a shared catalog, schedules, and database queries, use the JasperReports suite.
 
@@ -56,12 +56,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | Argument | Meaning |
 | --- | --- |
 | `template` | The text of the `.jrxml` file. |
-| `document` | One JSON object. This is the data. `$F{CompanyName}` prints `Northwind Traders`. A table aimed at `itemsList` prints one row for A-1. |
+| `document` | The JSON data. One object prints once: `$F{CompanyName}` prints `Northwind Traders`, and a table aimed at `itemsList` prints one row for A-1. A list of objects prints the detail band once per object. |
 | `Utc::now()` | The date and time printed when the template asks for the current time. It is shown in UTC, for example `2026-10-12 00:00:00`. Pass any `DateTime<Utc>` to use a fixed clock. |
 
 `output.pdf` is the file. `output.warnings` names anything the template asked for that pdfrost skipped, including a missing value. `output.placements` is where each piece landed on the page, measured in points from the top-left corner.
 
-If the call returns an error, there is no PDF. That happens when the template cannot be read, the file is not a report, or the page size is missing. A warning on its own still returns a PDF.
+`render_read` takes any reader instead of a value you have already parsed. A list at the top of that reader is taken one object at a time. Any other JSON value is read whole. The lines inside one object stay with that object.
+
+If the call returns an error, there is no PDF. That happens when the template cannot be read, the file is not a report, the page size is missing, or the JSON cannot be read. A warning on its own still returns a PDF.
 
 ## Read and save a template
 

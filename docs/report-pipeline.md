@@ -18,7 +18,7 @@ Parse fails when the XML is not a `jasperReport` document. It does not fail beca
 
 Walk the model and bind it to the JSON document.
 
-The document is one JSON object, and that object is the single main record. Title, detail, and the page bands fill from it once. The engine does not walk a list of root records and does not execute `queryString`. Text fields outside a table read `$F{name}` from that object, using the field's JSON path when the template defines one. A field whose `class` is `java.lang.Integer` prints a JSON number or a numeric string as digits. The samples declare no `pattern`.
+The document is one JSON value. An object is one main record, so the title, detail, and page bands fill from it once. An array is one record per element: the detail band repeats, the title sees the first element, and the summary sees the last. A later page keeps the record that caused the break. The engine does not execute `queryString`. `render` receives the value already parsed. `render_read` reads a root array one element at a time, so the rest of the list is not held as a tree. A list inside one object, such as `itemsList`, stays with that object. A table walks it by reference. Text fields outside a table read `$F{name}` from the current record, using the field's JSON path when the template defines one. A field whose `class` is `java.lang.Integer` prints a JSON number or a numeric string as digits. The samples declare no `pattern`.
 
 A table's `dataSourceExpression` must be a `subDataSource("…")` call. The string is a property of the same document whose value is an array. The operational templates all use `itemsList`. Each object in that array is one detail row. Fields declared inside that `subDataset` stay on the dataset. They are not aliases of the main report fields. The table reads `$F{…}` from the row.
 
@@ -36,7 +36,7 @@ Any other expression text produces a warning and an empty value. A missing field
 
 ## 3. Layout
 
-Place filled elements on pages.
+Place filled elements on pages. When a page is full, it is drawn into the PDF and its layout boxes are dropped before the next page starts. The PDF still holds the painted pages until the file is finished.
 
 Page content width is `pageWidth - leftMargin - rightMargin`. Content height is `pageHeight - topMargin - bottomMargin`.
 
@@ -45,7 +45,7 @@ Band order follows JasperReports for the bands this subset supports:
 1. `title` on the first page.
 2. `pageHeader` on every page.
 3. `columnHeader` where the template defines it.
-4. `detail`, including a table that grows with its rows.
+4. `detail`, once for an object and once per element for an array, including a table that grows with its rows.
 5. `summary` after the detail.
 6. `columnFooter` above the page footer on every page. Its height stays clear of the bands above.
 7. `pageFooter` on every page.

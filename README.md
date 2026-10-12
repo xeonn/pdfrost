@@ -6,6 +6,8 @@ The design is a JasperReports template, a `.jrxml` file. The JSON file is the da
 
 A text field such as `$F{CompanyName}` prints the company name from that JSON file. A table or a chart aimed at a list prints one row, or one point, for each entry in the list. A subreport is a second template. It uses the same JSON file: either the whole document, or one list inside it, such as `orders`.
 
+The usual file is one object, such as one invoice. A file that is a list of objects prints the detail band once for each object. Preview reads that list one object at a time, so a long run of invoices does not have to sit in memory all at once. The lines of a single invoice stay with that invoice.
+
 The same program is a Rust library, a Go package, and a desktop app. For the pieces it supports, it follows JasperReports 6.20.1. It does not run Java code written inside a template.
 
 ## What it is good for
@@ -47,6 +49,8 @@ A chart can be a bar, line, or area chart, including the stacked forms. A pictur
 
 To see this with the sample files, open `jrxmls/Subreport.jrxml`, then choose `jrxmls/SubreportData.json`. Preview is a two-page list of orders. Each order is drawn by `jrxmls/OrderLines.jrxml`, using the `orders` list in that JSON file.
 
+To print a list of receipts across two pages, open `jrxmls/Receipts.jrxml`, then choose `jrxmls/Receipts.json`. That file is a list. Each object is one receipt.
+
 | Way to use it | Where |
 | --- | --- |
 | Rust | Library [`pdfrost-engine`](crates/pdfrost-engine/README.md) |
@@ -85,7 +89,7 @@ fn main() {
 }
 ```
 
-`document` is one JSON object, the same kind of file the desktop app opens. The time you pass in is what the report prints when the template asks for the current date and time. It is shown in UTC, for example `2026-10-12 00:00:00`.
+`document` is the JSON for the print. One object is one receipt, invoice, or statement. A list of objects prints the detail band once for each object. `render_read` reads that list from a file, one object at a time. The time you pass in is what the report prints when the template asks for the current date and time. It is shown in UTC, for example `2026-10-12 00:00:00`.
 
 `parse` reads a template so the app can edit it. `write_report` saves that edit back to a `.jrxml` file. Details are in [crates/pdfrost-engine/README.md](crates/pdfrost-engine/README.md).
 

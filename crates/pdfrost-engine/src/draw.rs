@@ -3,7 +3,10 @@
 //! A table grows with its rows. Rows that do not fit move to the next page, and that
 //! page repeats the table's column header. `$F` inside a table reads the current row.
 
+use std::fmt;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
 use krilla::color::rgb;
@@ -13,6 +16,7 @@ use krilla::page::PageSettings;
 use krilla::paint::{Fill, FillRule, LineCap, LineJoin, Stroke};
 use krilla::text::{Font, TextDirection};
 use krilla::Document;
+use serde::de::{Deserializer, SeqAccess, Visitor};
 use serde_json::Value;
 use skrifa::instance::{LocationRef, Size};
 use skrifa::raw::TableProvider;
@@ -46,32 +50,10 @@ pub(crate) fn draw(
     rendered_at: DateTime<Utc>,
     asset_dir: Option<&Path>,
 ) -> Result<RenderOutput, Error> {
-    if report.page_width <= 0.0 || report.page_height <= 0.0 {
-        return Err(Error::PageSize);
-    }
-    let regular = load_font(DEFAULT_SANS_REGULAR)?;
-    let bold = load_font(DEFAULT_SANS_BOLD)?;
-    let italic = load_font(DEFAULT_SANS_ITALIC)?;
-    let bold_italic = load_font(DEFAULT_SANS_BOLD_ITALIC)?;
     let mut warnings = report.warnings.clone();
-    let pages = layout(report, document, rendered_at, asset_dir, &mut warnings);
-
-    let mut pdf_document = Document::new();
-    let settings =
-        PageSettings::from_wh(report.page_width, report.page_height).ok_or(Error::PageSize)?;
-    let mut placements = Vec::new();
-    for page in &pages {
-        let mut pdf_page = pdf_document.start_page_with(settings.clone());
-        let mut surface = pdf_page.surface();
-        for item in page {
-            paint(&mut surface, item, &regular, &bold, &italic, &bold_italic);
-            placements.push(item.placement.clone());
-        }
-        surface.finish();
-        pdf_page.finish();
-    }
-    let pdf = pdf_document.finish().map_err(|_| Error::Pdf)?;
-
+    let mut layout = Layout::begin(report, document, rendered_at, asset_dir, &mut warnings)?;
+    layout.fill_document(document);
+    let (pdf, placements) = layout.finish_output()?;
     Ok(RenderOutput {
         pdf,
         warnings,
@@ -79,48 +61,122 @@ pub(crate) fn draw(
     })
 }
 
+/// Fill a root JSON array, keeping one element at a time.
+pub(crate) fn draw_array<R: Read>(
+    report: &Report,
+    reader: R,
+    rendered_at: DateTime<Utc>,
+    asset_dir: Option<&Path>,
+) -> Result<RenderOutput, Error> {
+    let mut warnings = report.warnings.clone();
+    let mut layout = Layout::begin(
+        report,
+        empty_record(),
+        rendered_at,
+        asset_dir,
+        &mut warnings,
+    )?;
+    let mut deserializer = serde_json::Deserializer::from_reader(reader);
+    deserializer
+        .deserialize_seq(RecordFill {
+            layout: &mut layout,
+        })
+        .map_err(|err| Error::Json(err.to_string()))?;
+    let (pdf, placements) = layout.finish_output()?;
+    Ok(RenderOutput {
+        pdf,
+        warnings,
+        placements,
+    })
+}
+
+/// The record lives with the caller, not inside [`Layout`].
+fn borrow_record<'b>(record: *const Value) -> &'b Value {
+    // SAFETY: `set_record` stored this address, and that value stays put until
+    // the next `set_record` or the end of this fill.
+    unsafe { &*record }
+}
+
+fn empty_record() -> &'static Value {
+    static EMPTY: OnceLock<Value> = OnceLock::new();
+    EMPTY.get_or_init(|| Value::Null)
+}
+
+fn paint_page(state: &mut PaintState, page: &[Drawn]) {
+    let mut pdf_page = state.document.start_page_with(state.settings.clone());
+    let mut surface = pdf_page.surface();
+    for item in page {
+        paint(
+            &mut surface,
+            item,
+            &state.regular,
+            &state.bold,
+            &state.italic,
+            &state.bold_italic,
+        );
+    }
+    surface.finish();
+    pdf_page.finish();
+    for item in page {
+        state.placements.push(item.placement.clone());
+    }
+}
+
+struct RecordFill<'a, 'l> {
+    layout: &'l mut Layout<'a>,
+}
+
+impl<'de> Visitor<'de> for RecordFill<'_, '_> {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a JSON array of records")
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<(), A::Error> {
+        let Some(mut current) = seq.next_element::<Value>()? else {
+            self.layout.fill_records(&[]);
+            return Ok(());
+        };
+        self.layout.set_record(&current);
+        self.layout.open_page();
+        self.layout.place_kind(BandKind::Title);
+        self.layout.place_kind(BandKind::PageHeader);
+        self.layout.place_kind(BandKind::ColumnHeader);
+        self.layout.place_kind(BandKind::Detail);
+        while let Some(next) = seq.next_element::<Value>()? {
+            current = next;
+            self.layout.set_record(&current);
+            self.layout.place_kind(BandKind::Detail);
+        }
+        self.layout.place_kind(BandKind::Summary);
+        self.layout.finish_page();
+        Ok(())
+    }
+}
+
 fn load_font(bytes: &'static [u8]) -> Result<Font, Error> {
     Font::new(bytes.into(), 0).ok_or(Error::Font)
 }
 
-fn layout(
-    report: &Report,
-    document: &Value,
-    rendered_at: DateTime<Utc>,
-    asset_dir: Option<&Path>,
-    warnings: &mut Vec<Warning>,
-) -> Vec<Vec<Drawn>> {
-    let mut layout = Layout {
-        report,
-        document,
-        rendered_at,
-        asset_dir,
-        warnings,
-        pages: Vec::new(),
-        page: 0,
-        y: 0.0,
-        allow_break: true,
-        stack: Vec::new(),
-    };
-    layout.open_page();
-    layout.place_kind(BandKind::Title);
-    layout.place_kind(BandKind::PageHeader);
-    layout.place_kind(BandKind::ColumnHeader);
-    layout.place_kind(BandKind::Detail);
-    layout.place_kind(BandKind::Summary);
-    layout.finish_page();
-    if layout.pages.is_empty() {
-        layout.pages.push(Vec::new());
-    }
-    layout.pages
+struct PaintState {
+    document: Document,
+    settings: PageSettings,
+    placements: Vec<Placement>,
+    regular: Font,
+    bold: Font,
+    italic: Font,
+    bold_italic: Font,
 }
 
 struct Layout<'a> {
     report: &'a Report,
-    document: &'a Value,
+    /// Points at the record owned by the caller. It is not stored in this struct.
+    record: *const Value,
     rendered_at: DateTime<Utc>,
     asset_dir: Option<&'a Path>,
     warnings: &'a mut Vec<Warning>,
+    /// The page being laid out. Finished pages are painted and dropped.
     pages: Vec<Vec<Drawn>>,
     page: u32,
     y: f32,
@@ -129,9 +185,120 @@ struct Layout<'a> {
     allow_break: bool,
     /// Canonical paths of subreports already being filled.
     stack: Vec<PathBuf>,
+    /// Present for the master report. A subreport leaves this empty and keeps
+    /// its drawn items for the caller to splice in.
+    paint: Option<PaintState>,
 }
 
-impl Layout<'_> {
+impl<'a> Layout<'a> {
+    fn begin(
+        report: &'a Report,
+        document: &'a Value,
+        rendered_at: DateTime<Utc>,
+        asset_dir: Option<&'a Path>,
+        warnings: &'a mut Vec<Warning>,
+    ) -> Result<Self, Error> {
+        if report.page_width <= 0.0 || report.page_height <= 0.0 {
+            return Err(Error::PageSize);
+        }
+        let settings =
+            PageSettings::from_wh(report.page_width, report.page_height).ok_or(Error::PageSize)?;
+        Ok(Self {
+            report,
+            record: document,
+            rendered_at,
+            asset_dir,
+            warnings,
+            pages: Vec::new(),
+            page: 0,
+            y: 0.0,
+            allow_break: true,
+            stack: Vec::new(),
+            paint: Some(PaintState {
+                document: Document::new(),
+                settings,
+                placements: Vec::new(),
+                regular: load_font(DEFAULT_SANS_REGULAR)?,
+                bold: load_font(DEFAULT_SANS_BOLD)?,
+                italic: load_font(DEFAULT_SANS_ITALIC)?,
+                bold_italic: load_font(DEFAULT_SANS_BOLD_ITALIC)?,
+            }),
+        })
+    }
+
+    fn set_record(&mut self, record: &Value) {
+        self.record = record;
+    }
+
+    fn record_ptr(&self) -> *const Value {
+        self.record
+    }
+
+    fn fill_document(&mut self, document: &'a Value) {
+        match document.as_array() {
+            Some(items) => self.fill_records(items),
+            None => {
+                self.set_record(document);
+                self.fill_one_record();
+            }
+        }
+    }
+
+    fn fill_records(&mut self, items: &'a [Value]) {
+        let Some(first) = items.first() else {
+            let empty = Value::Object(Default::default());
+            self.set_record(&empty);
+            self.open_page();
+            self.place_kind(BandKind::Title);
+            self.place_kind(BandKind::PageHeader);
+            self.place_kind(BandKind::ColumnHeader);
+            self.place_kind(BandKind::Summary);
+            self.finish_page();
+            return;
+        };
+        self.set_record(first);
+        self.open_page();
+        self.place_kind(BandKind::Title);
+        self.place_kind(BandKind::PageHeader);
+        self.place_kind(BandKind::ColumnHeader);
+        for item in items {
+            self.set_record(item);
+            self.place_kind(BandKind::Detail);
+        }
+        self.place_kind(BandKind::Summary);
+        self.finish_page();
+    }
+
+    fn fill_one_record(&mut self) {
+        self.open_page();
+        self.place_kind(BandKind::Title);
+        self.place_kind(BandKind::PageHeader);
+        self.place_kind(BandKind::ColumnHeader);
+        self.place_kind(BandKind::Detail);
+        self.place_kind(BandKind::Summary);
+        self.finish_page();
+    }
+
+    fn finish_output(mut self) -> Result<(Vec<u8>, Vec<Placement>), Error> {
+        self.flush_painted_page();
+        let paint = self.paint.take().ok_or(Error::Pdf)?;
+        let pdf = paint.document.finish().map_err(|_| Error::Pdf)?;
+        Ok((pdf, paint.placements))
+    }
+
+    /// Paint the page just closed and drop its layout boxes.
+    fn flush_painted_page(&mut self) {
+        if self.paint.is_none() {
+            return;
+        }
+        let Some(page) = self.pages.pop() else {
+            return;
+        };
+        if let Some(paint) = self.paint.as_mut() {
+            paint_page(paint, &page);
+        }
+    }
+
     fn limit(&self) -> f32 {
         self.report.page_height - self.report.bottom_margin - footer_height(self.report)
     }
@@ -139,6 +306,7 @@ impl Layout<'_> {
     fn open_page(&mut self) {
         if self.page > 0 {
             self.finish_page();
+            self.flush_painted_page();
         }
         self.page += 1;
         self.pages.push(Vec::new());
@@ -152,7 +320,8 @@ impl Layout<'_> {
 
     fn finish_page(&mut self) {
         let fields = self.report.fields.clone();
-        let document = self.document.clone();
+        let record = self.record_ptr();
+        let document = borrow_record(record);
         let left = self.report.left_margin;
         let mut top = self.report.page_height - self.report.bottom_margin;
         let page_footers: Vec<Band> = bands(self.report, BandKind::PageFooter).cloned().collect();
@@ -183,7 +352,8 @@ impl Layout<'_> {
 
     fn paint_background(&mut self) {
         let fields = self.report.fields.clone();
-        let document = self.document.clone();
+        let record = self.record_ptr();
+        let document = borrow_record(record);
         let left = self.report.left_margin;
         let top = self.report.top_margin;
         let backgrounds: Vec<Band> = bands(self.report, BandKind::Background).cloned().collect();
@@ -201,7 +371,8 @@ impl Layout<'_> {
 
     fn place_fixed(&mut self, kind: BandKind) {
         let fields = self.report.fields.clone();
-        let document = self.document.clone();
+        let record = self.record_ptr();
+        let document = borrow_record(record);
         let left = self.report.left_margin;
         let found: Vec<Band> = bands(self.report, kind).cloned().collect();
         for band in &found {
@@ -212,8 +383,9 @@ impl Layout<'_> {
     }
 
     fn place_flow(&mut self, band: &Band) {
-        let document = self.document.clone();
-        self.place_flow_data(band, &document);
+        let record = self.record_ptr();
+        let document = borrow_record(record);
+        self.place_flow_data(band, document);
     }
 
     fn place_flow_data(&mut self, band: &Band, document: &Value) {
@@ -295,10 +467,7 @@ impl Layout<'_> {
     fn place_table(&mut self, table: &Table, data: &Value) {
         let abs_x = self.report.left_margin + table.element.x;
         let fields = dataset_fields(self.report, table.sub_dataset.as_deref()).to_vec();
-        let rows: Vec<Value> = table_rows(data, table.data_source.as_deref())
-            .into_iter()
-            .cloned()
-            .collect();
+        let rows = table_rows(data, table.data_source.as_deref());
         self.place_table_section(table, abs_x, SectionKind::TableHeader, None, &fields);
         self.place_table_section(table, abs_x, SectionKind::ColumnHeader, None, &fields);
         let row_height = section_height(table, SectionKind::DetailCell).unwrap_or(0.0);
@@ -328,8 +497,9 @@ impl Layout<'_> {
             self.ensure(height);
         }
         let y = self.y;
-        let fallback = self.document.clone();
-        let data = row.unwrap_or(&fallback);
+        let record = self.record_ptr();
+        let fallback = borrow_record(record);
+        let data = row.unwrap_or(fallback);
         let mut x = abs_x;
         for column in &table.columns {
             if let Some(section) = column.sections.iter().find(|section| section.kind == kind) {
@@ -726,7 +896,7 @@ impl Layout<'_> {
         let child_dir = path.parent().map(|dir| dir.to_path_buf());
         stack_report(
             &child,
-            &records,
+            records,
             self.rendered_at,
             child_dir.as_deref(),
             self.warnings,
@@ -798,19 +968,19 @@ fn item_cut(items: &[Drawn], room: f32) -> Option<f32> {
 
 fn stack_report(
     report: &Report,
-    records: &[Value],
+    records: crate::subreport::Records<'_>,
     rendered_at: DateTime<Utc>,
     asset_dir: Option<&Path>,
     warnings: &mut Vec<Warning>,
     stack: Vec<PathBuf>,
     page: u32,
 ) -> Block {
-    let Some(first) = records.first() else {
+    let Some(first) = records.get(0) else {
         return Block::empty();
     };
     let mut layout = Layout {
         report,
-        document: first,
+        record: first,
         rendered_at,
         asset_dir,
         warnings,
@@ -819,6 +989,7 @@ fn stack_report(
         y: 0.0,
         allow_break: false,
         stack,
+        paint: None,
     };
     for kind in [
         BandKind::Background,
@@ -830,7 +1001,11 @@ fn stack_report(
     }
     let details: Vec<Band> = bands(report, BandKind::Detail).cloned().collect();
     let mut breaks = Vec::new();
-    for record in records {
+    for index in 0..records.len() {
+        let Some(record) = records.get(index) else {
+            continue;
+        };
+        layout.set_record(record);
         for band in &details {
             layout.place_flow_data(band, record);
         }
