@@ -28,6 +28,13 @@ pub fn write_report(report: &Report) -> String {
     for dataset in &report.subdatasets {
         write_subdataset(&mut xml, dataset);
     }
+    if let Some(query) = &report.query {
+        let _ = writeln!(
+            xml,
+            "\t<queryString language=\"JSON\">{}</queryString>",
+            escape(query)
+        );
+    }
     for field in &report.fields {
         write_field(&mut xml, field, 1);
     }

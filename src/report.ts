@@ -194,6 +194,8 @@ export type Report = {
   bottomMargin: number;
   styles: Style[];
   fields: Field[];
+  /** JSON path of the main record set. Null means the file root. */
+  query: string | null;
   subdatasets: SubDataset[];
   bands: Band[];
   warnings: Warning[];
@@ -261,6 +263,7 @@ export function blankReport(): Report {
     bottomMargin: 20,
     styles: [],
     fields: [],
+    query: null,
     subdatasets: [],
     bands: [emptyBand("title", 79), emptyBand("detail", 125), emptyBand("pageFooter", 54)],
     warnings: [],
@@ -603,7 +606,21 @@ export function removeColumn(table: Extract<Element, { type: "table" }>, index: 
   syncTableBox(table);
 }
 
-/** Read Fields adds names that are not already present. A repeated name is dropped. */
+export function datasetListPath(report: Report, datasetName: string): string | null {
+  for (const band of report.bands) {
+    for (const element of band.elements) {
+      if (element.type !== "table" && element.type !== "chart") {
+        continue;
+      }
+      if (element.subDataset === datasetName && element.dataSource) {
+        return element.dataSource;
+      }
+    }
+  }
+  return null;
+}
+
+/** Read Fields adds names that are not already present. A repeated name keeps its class. An absolute JSON path replaces a short one. */
 export function fieldsFromDiscovery(
   previous: Field[],
   found: { name: string; className: string; jsonPath: string }[],
@@ -618,7 +635,14 @@ export function fieldsFromDiscovery(
     kept.push(field);
   }
   for (const item of found) {
-    if (!item.name || names.has(item.name)) {
+    if (!item.name) {
+      continue;
+    }
+    const existing = kept.find((field) => field.name === item.name);
+    if (existing) {
+      if (item.jsonPath.startsWith("(root)")) {
+        existing.jsonPath = item.jsonPath;
+      }
       continue;
     }
     names.add(item.name);

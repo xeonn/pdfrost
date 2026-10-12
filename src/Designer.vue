@@ -27,6 +27,7 @@ import {
   elementLabel,
   ensureBand,
   expressionChoices,
+  datasetListPath,
   fieldsFromDiscovery,
   hexColor,
   nudge,
@@ -62,7 +63,7 @@ const emit = defineEmits<{
   saved: [path: string];
   openTemplate: [path: string];
   openDataset: [];
-  datasets: [datasets: { id: string; name: string; fields: Field[] }[]];
+  datasets: [datasets: { id: string; name: string; listPath: string | null; fields: Field[] }[]];
 }>();
 
 type Selection =
@@ -1838,8 +1839,15 @@ function fieldsFor(id: string): Field[] | null {
   return report.value.subdatasets[index]?.fields ?? null;
 }
 
-function appendFields(id: string, found: { name: string; className: string; jsonPath: string }[]): void {
+function appendFields(
+  id: string,
+  found: { name: string; className: string; jsonPath: string }[],
+  query?: string | null,
+): void {
   edit(() => {
+    if (report.value && id === "report" && query !== undefined) {
+      report.value.query = query;
+    }
     const list = fieldsFor(id);
     if (!list) {
       return;
@@ -1927,11 +1935,13 @@ const datasetChoices = computed(() => {
     {
       id: "report",
       name: current.name || "Report",
+      listPath: current.query?.trim() || null,
       fields: current.fields.map((field) => ({ ...field })),
     },
     ...current.subdatasets.map((dataset, index) => ({
       id: String(index),
       name: dataset.name || "Dataset",
+      listPath: datasetListPath(current, dataset.name),
       fields: dataset.fields.map((field) => ({ ...field })),
     })),
   ];

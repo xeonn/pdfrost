@@ -49,7 +49,7 @@ const designRef = ref<{
   isDirty: () => boolean;
   save: () => Promise<void>;
   saveAs: () => Promise<void>;
-  appendFields: (id: string, fields: { name: string; className: string; jsonPath: string }[]) => void;
+  appendFields: (id: string, fields: { name: string; className: string; jsonPath: string }[], query?: string | null) => void;
   changeField: (
     id: string,
     index: number,
@@ -61,7 +61,7 @@ const designRef = ref<{
 const fileMenuOpen = ref(false);
 const fileCanSave = ref(false);
 const fileMenuEl = ref<HTMLElement | null>(null);
-const datasets = ref<{ id: string; name: string; fields: { name: string; className: string; description: string | null; jsonPath: string | null }[] }[]>([]);
+const datasets = ref<{ id: string; name: string; listPath: string | null; fields: { name: string; className: string; description: string | null; jsonPath: string | null }[] }[]>([]);
 let renderGeneration = 0;
 
 const stage = new PdfStage();
@@ -769,7 +769,7 @@ onBeforeUnmount(() => {
           :active="mode === 'data'"
           class="min-h-0 flex-1"
           @pick-document="chooseDocument(true)"
-          @append-fields="(id, fields) => designRef?.appendFields(id, fields)"
+          @append-fields="(id, fields, query) => designRef?.appendFields(id, fields, query)"
           @change-field="(id, index, patch) => designRef?.changeField(id, index, patch)"
           @add-field="(id) => designRef?.addField(id)"
           @remove-field="(id, index) => designRef?.removeField(id, index)"

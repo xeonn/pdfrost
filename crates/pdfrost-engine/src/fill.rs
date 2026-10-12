@@ -20,6 +20,7 @@ pub(crate) fn eval(
     expression: &str,
     fields: &[Field],
     data: &Value,
+    root: &Value,
     location: &str,
     page: u32,
     rendered_at: DateTime<Utc>,
@@ -33,7 +34,7 @@ pub(crate) fn eval(
             text: format_utc(rendered_at),
             warning: None,
         },
-        Expression::Field(name) => field(&name, fields, data, location),
+        Expression::Field(name) => field(&name, fields, data, root, location),
         Expression::Empty
         | Expression::Text(_)
         | Expression::Number(_)
@@ -44,12 +45,18 @@ pub(crate) fn eval(
     }
 }
 
-pub(crate) fn field(name: &str, fields: &[Field], document: &Value, location: &str) -> Filled {
+pub(crate) fn field(
+    name: &str,
+    fields: &[Field],
+    document: &Value,
+    root: &Value,
+    location: &str,
+) -> Filled {
     let Some(field) = fields.iter().find(|field| field.name == name) else {
         return blank(name, location);
     };
     let path = field.json_path.as_deref().unwrap_or(name);
-    let Some(value) = lookup(document, path) else {
+    let Some(value) = resolve(document, root, path) else {
         return blank(name, location);
     };
     match printable(field, value) {
@@ -89,6 +96,55 @@ fn lookup<'a>(document: &'a Value, path: &str) -> Option<&'a Value> {
         current = current.get(part)?;
     }
     Some(current)
+}
+
+/// `(root).Northwind.Customers.Address` starts at `root`.
+/// A property step on an array uses the element that is the current record.
+fn resolve<'a>(record: &'a Value, root: &'a Value, path: &str) -> Option<&'a Value> {
+    let path = path.trim();
+    let Some(rest) = path.strip_prefix("(root)") else {
+        return lookup(record, path);
+    };
+    let rest = rest.trim_start_matches('.');
+    if rest.is_empty() {
+        return Some(root);
+    }
+    let mut current = root;
+    for part in rest.split('.') {
+        if part.is_empty() {
+            return None;
+        }
+        if let Some(items) = current.as_array() {
+            if is_index(part) {
+                current = items.get(part.parse::<usize>().ok()?)?;
+                continue;
+            }
+            current = element_holding(items, record)?;
+        }
+        current = current.get(part)?;
+    }
+    Some(current)
+}
+
+fn is_index(part: &str) -> bool {
+    !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn element_holding<'a>(items: &'a [Value], record: &'a Value) -> Option<&'a Value> {
+    items
+        .iter()
+        .find(|item| std::ptr::eq(*item, record) || contains_value(item, record))
+}
+
+fn contains_value(value: &Value, record: &Value) -> bool {
+    if std::ptr::eq(value, record) {
+        return true;
+    }
+    match value {
+        Value::Array(items) => items.iter().any(|item| contains_value(item, record)),
+        Value::Object(map) => map.values().any(|child| contains_value(child, record)),
+        _ => false,
+    }
 }
 
 fn printable(field: &Field, value: &Value) -> Option<String> {

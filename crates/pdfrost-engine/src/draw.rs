@@ -139,6 +139,7 @@ impl<'de> Visitor<'de> for RecordFill<'_, '_> {
             return Ok(());
         };
         self.layout.set_record(&current);
+        self.layout.root = &current;
         self.layout.open_page();
         self.layout.place_kind(BandKind::Title);
         self.layout.place_kind(BandKind::PageHeader);
@@ -147,6 +148,7 @@ impl<'de> Visitor<'de> for RecordFill<'_, '_> {
         while let Some(next) = seq.next_element::<Value>()? {
             current = next;
             self.layout.set_record(&current);
+            self.layout.root = &current;
             self.layout.place_kind(BandKind::Detail);
         }
         self.layout.place_kind(BandKind::Summary);
@@ -173,6 +175,8 @@ struct Layout<'a> {
     report: &'a Report,
     /// Points at the record owned by the caller. It is not stored in this struct.
     record: *const Value,
+    /// The document passed to this fill. A list missing on the current record is read here.
+    root: *const Value,
     rendered_at: DateTime<Utc>,
     asset_dir: Option<&'a Path>,
     warnings: &'a mut Vec<Warning>,
@@ -206,6 +210,7 @@ impl<'a> Layout<'a> {
         Ok(Self {
             report,
             record: document,
+            root: document,
             rendered_at,
             asset_dir,
             warnings,
@@ -235,7 +240,9 @@ impl<'a> Layout<'a> {
     }
 
     fn fill_document(&mut self, document: &'a Value) {
-        match document.as_array() {
+        self.root = document;
+        let selected = crate::subreport::main_document(document, self.report.query.as_deref());
+        match selected.as_array() {
             Some(items) => self.fill_records(items),
             None => {
                 self.set_record(document);
@@ -467,7 +474,8 @@ impl<'a> Layout<'a> {
     fn place_table(&mut self, table: &Table, data: &Value) {
         let abs_x = self.report.left_margin + table.element.x;
         let fields = dataset_fields(self.report, table.sub_dataset.as_deref()).to_vec();
-        let rows = table_rows(data, table.data_source.as_deref());
+        let root = self.root;
+        let rows = table_rows(data, borrow_record(root), table.data_source.as_deref());
         self.place_table_section(table, abs_x, SectionKind::TableHeader, None, &fields);
         self.place_table_section(table, abs_x, SectionKind::ColumnHeader, None, &fields);
         let row_height = section_height(table, SectionKind::DetailCell).unwrap_or(0.0);
@@ -585,10 +593,12 @@ impl<'a> Layout<'a> {
                 stretch && text.stretch,
             ),
             Element::TextField(field) => {
+                let root = self.root;
                 let filled = fill::eval(
                     &field.expression,
                     fields,
                     data,
+                    borrow_record(root),
                     "textField",
                     self.page,
                     self.rendered_at,
@@ -639,8 +649,15 @@ impl<'a> Layout<'a> {
                 0.0
             }
             Element::Image(image) => {
-                let prepared =
-                    crate::image::prepare(image, fields, data, self.asset_dir, self.warnings);
+                let root = self.root;
+                let prepared = crate::image::prepare(
+                    image,
+                    fields,
+                    data,
+                    borrow_record(root),
+                    self.asset_dir,
+                    self.warnings,
+                );
                 let extra = prepared.extra_height();
                 let mut grown = image.element.clone();
                 grown.height += extra;
@@ -657,11 +674,13 @@ impl<'a> Layout<'a> {
             Element::Break(_) => 0.0,
             Element::Subreport(_) => 0.0,
             Element::Chart(chart) => {
+                let root = self.root;
                 let plot = crate::chart::prepare(
                     chart,
                     fields,
                     &self.report.subdatasets,
                     data,
+                    borrow_record(root),
                     self.warnings,
                 );
                 let label = if plot.is_some() {
@@ -829,9 +848,14 @@ impl<'a> Layout<'a> {
             });
             return Block::empty();
         }
-        let Some(source) =
-            crate::subreport::expression_path(&sub.expression, fields, data, self.warnings)
-        else {
+        let root = self.root;
+        let Some(source) = crate::subreport::expression_path(
+            &sub.expression,
+            fields,
+            data,
+            borrow_record(root),
+            self.warnings,
+        ) else {
             return Block::empty();
         };
         let Some(path) = crate::subreport::locate(&source, self.asset_dir, self.warnings) else {
@@ -871,7 +895,12 @@ impl<'a> Layout<'a> {
                 location: format!("subreport {}", warning.location),
             });
         }
-        let records = match crate::subreport::records(data, sub.data_source.as_deref()) {
+        let root = self.root;
+        let records = match crate::subreport::records_near(
+            data,
+            borrow_record(root),
+            sub.data_source.as_deref(),
+        ) {
             Ok(records) => records,
             Err(()) => {
                 let path = sub.data_source.as_deref().unwrap_or("");
@@ -981,6 +1010,7 @@ fn stack_report(
     let mut layout = Layout {
         report,
         record: first,
+        root: first,
         rendered_at,
         asset_dir,
         warnings,
@@ -1006,6 +1036,7 @@ fn stack_report(
             continue;
         };
         layout.set_record(record);
+        layout.root = record;
         for band in &details {
             layout.place_flow_data(band, record);
         }
@@ -1046,12 +1077,12 @@ fn section_height(table: &Table, kind: SectionKind) -> Option<f32> {
     height
 }
 
-fn table_rows<'a>(document: &'a Value, source: Option<&str>) -> Vec<&'a Value> {
-    let Some(name) = source else {
+fn table_rows<'a>(document: &'a Value, root: &'a Value, source: Option<&str>) -> Vec<&'a Value> {
+    let Some(source) = source.map(str::trim).filter(|source| !source.is_empty()) else {
         return Vec::new();
     };
-    match document.get(name) {
-        Some(Value::Array(items)) => items.iter().collect(),
+    match crate::subreport::records_near(document, root, Some(source)) {
+        Ok(crate::subreport::Records::Many(items)) => items.iter().collect(),
         _ => Vec::new(),
     }
 }

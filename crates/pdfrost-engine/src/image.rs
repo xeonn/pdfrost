@@ -42,6 +42,7 @@ pub(crate) fn prepare(
     image: &Image,
     fields: &[crate::model::Field],
     data: &Value,
+    root: &Value,
     asset_dir: Option<&Path>,
     warnings: &mut Vec<Warning>,
 ) -> Prepared {
@@ -49,7 +50,7 @@ pub(crate) fn prepare(
         Expression::Empty => return missing(image),
         Expression::Text(text) => text,
         Expression::Field(name) => {
-            let filled = fill::field(&name, fields, data, "image");
+            let filled = fill::field(&name, fields, data, root, "image");
             if let Some(warning) = filled.warning {
                 warnings.push(warning);
             }

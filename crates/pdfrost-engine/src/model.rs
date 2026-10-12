@@ -16,6 +16,9 @@ pub struct Report {
     pub bottom_margin: f32,
     pub styles: Vec<Style>,
     pub fields: Vec<Field>,
+    /// JSON query path for the main record set. Empty means the document itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
     /// Subdataset fields stay here. They are not copied onto [`Report::fields`].
     pub subdatasets: Vec<SubDataset>,
     /// Bands in document order.

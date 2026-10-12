@@ -16,12 +16,13 @@ pub(crate) fn expression_path(
     expression: &str,
     fields: &[Field],
     data: &Value,
+    root: &Value,
     warnings: &mut Vec<Warning>,
 ) -> Option<String> {
     match Expression::parse(expression) {
         Expression::Text(text) => Some(text),
         Expression::Field(name) => {
-            let filled = fill::field(&name, fields, data, "subreport");
+            let filled = fill::field(&name, fields, data, root, "subreport");
             if let Some(warning) = filled.warning {
                 warnings.push(warning);
             }
@@ -108,6 +109,28 @@ pub(crate) fn records<'a>(document: &'a Value, source: Option<&str>) -> Result<R
     match value {
         Value::Array(items) => Ok(Records::Many(items)),
         other => Ok(Records::One(other)),
+    }
+}
+
+/// The main record set. A query path that exists in the document replaces it.
+/// A missing path leaves the document unchanged.
+pub(crate) fn main_document<'a>(document: &'a Value, query: Option<&str>) -> &'a Value {
+    let Some(query) = query.map(str::trim).filter(|query| !query.is_empty()) else {
+        return document;
+    };
+    at_path(document, query).unwrap_or(document)
+}
+
+/// `source` is read from `record`. When that path is missing, it is read from `root`.
+pub(crate) fn records_near<'a>(
+    record: &'a Value,
+    root: &'a Value,
+    source: Option<&str>,
+) -> Result<Records<'a>, ()> {
+    match records(record, source) {
+        Ok(found) => Ok(found),
+        Err(()) if !std::ptr::eq(record, root) => records(root, source),
+        Err(()) => Err(()),
     }
 }
 

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import { defaultPath, previewTable, readFields, valueAt } from "./dataRows";
+import { defaultPath, previewTable, readFields, recordPath, valueAt } from "./dataRows";
 
 const receipts = JSON.parse(readFileSync("jrxmls/Receipts.json", "utf8")) as unknown;
 const orders = JSON.parse(readFileSync("jrxmls/SubreportData.json", "utf8")) as unknown;
@@ -37,20 +37,47 @@ describe("previewTable", () => {
 
   test("read fields keeps primitive columns and the integer class", () => {
     expect(readFields(receipts, ".")).toEqual([
-      { name: "receiptNo", className: "java.lang.String", jsonPath: "receiptNo" },
-      { name: "customer", className: "java.lang.String", jsonPath: "customer" },
-      { name: "amount", className: "java.lang.Integer", jsonPath: "amount" },
-      { name: "note", className: "java.lang.String", jsonPath: "note" },
+      { name: "receiptNo", className: "java.lang.String", jsonPath: "(root).receiptNo" },
+      { name: "customer", className: "java.lang.String", jsonPath: "(root).customer" },
+      { name: "amount", className: "java.lang.Integer", jsonPath: "(root).amount" },
+      { name: "note", className: "java.lang.String", jsonPath: "(root).note" },
     ]);
     expect(readFields(orders, "")).toEqual([
-      { name: "company", className: "java.lang.String", jsonPath: "company" },
-      { name: "contact", className: "java.lang.String", jsonPath: "contact" },
+      { name: "company", className: "java.lang.String", jsonPath: "(root).company" },
+      { name: "contact", className: "java.lang.String", jsonPath: "(root).contact" },
     ]);
     expect(readFields(orders, "orders.0.lines")).toEqual([
-      { name: "sku", className: "java.lang.String", jsonPath: "sku" },
-      { name: "qty", className: "java.lang.Integer", jsonPath: "qty" },
+      { name: "sku", className: "java.lang.String", jsonPath: "(root).orders.lines.sku" },
+      { name: "qty", className: "java.lang.Integer", jsonPath: "(root).orders.lines.qty" },
     ]);
+    expect(readFields(JSON.parse(readFileSync("jrxmls/SampleData.json", "utf8")) as unknown, "Northwind.Customers")).toEqual(
+      expect.arrayContaining([
+        { name: "Address", className: "java.lang.String", jsonPath: "(root).Northwind.Customers.Address" },
+      ]),
+    );
     expect(readFields(orders, "missing")).toBeNull();
+    expect(recordPath(JSON.parse(readFileSync("jrxmls/SampleData.json", "utf8")) as unknown, "")).toBe(
+      "Northwind.Customers",
+    );
+    expect(recordPath({ itemsList: [{ sku: "A", qty: 1 }] }, "")).toBe("itemsList");
+    expect(recordPath(receipts, ".")).toBe(".");
+    const many = Array.from({ length: 120 }, (_, index) => ({ n: index }));
+    const first = previewTable(many, ".", 0);
+    expect(first.pageCount).toBe(2);
+    expect(first.rows).toHaveLength(100);
+    expect(first.rows[0]?.[0]).toBe("0");
+    const second = previewTable(many, ".", 1);
+    expect(second.rows).toHaveLength(20);
+    expect(second.rows[0]?.[0]).toBe("100");
+    expect(
+      readFields(
+        { docno: "1", audit: { created: "t" }, items: [{ sku: "A" }] },
+        "",
+      ),
+    ).toEqual([
+      { name: "docno", className: "java.lang.String", jsonPath: "(root).docno" },
+      { name: "audit_created", className: "java.lang.String", jsonPath: "(root).audit.created" },
+    ]);
   });
 
   test("a missing path is reported", () => {

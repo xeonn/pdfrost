@@ -17,17 +17,19 @@ pub(crate) fn prepare(
     fields: &[Field],
     subdatasets: &[SubDataset],
     document: &Value,
+    root: &Value,
     warnings: &mut Vec<Warning>,
 ) -> Option<CategoryChart> {
     let kind = chart_kind(&chart.kind)?;
     let fields = chart_fields(chart, fields, subdatasets);
     let mut dataset = CategoryDataset::new();
-    for row in rows(chart, document) {
+    for row in rows(chart, document, root) {
         for series in &chart.series {
             let Some(name) = label(
                 &series.series_expression,
                 fields,
                 row,
+                root,
                 &chart.kind,
                 warnings,
             ) else {
@@ -37,13 +39,20 @@ pub(crate) fn prepare(
                 &series.category_expression,
                 fields,
                 row,
+                root,
                 &chart.kind,
                 warnings,
             ) else {
                 continue;
             };
-            let Some(value) = number(&series.value_expression, fields, row, &chart.kind, warnings)
-            else {
+            let Some(value) = number(
+                &series.value_expression,
+                fields,
+                row,
+                root,
+                &chart.kind,
+                warnings,
+            ) else {
                 continue;
             };
             dataset.add_value(name, category, value);
@@ -57,14 +66,12 @@ pub(crate) fn prepare(
     }
     Some(CategoryChart {
         kind,
-        title: chart
-            .title
-            .as_deref()
-            .and_then(|expression| label(expression, fields, document, &chart.kind, warnings)),
-        subtitle: chart
-            .subtitle
-            .as_deref()
-            .and_then(|expression| label(expression, fields, document, &chart.kind, warnings)),
+        title: chart.title.as_deref().and_then(|expression| {
+            label(expression, fields, document, root, &chart.kind, warnings)
+        }),
+        subtitle: chart.subtitle.as_deref().and_then(|expression| {
+            label(expression, fields, document, root, &chart.kind, warnings)
+        }),
         show_legend: chart.show_legend,
         dataset,
     })
@@ -94,12 +101,17 @@ fn chart_fields<'a>(
         .unwrap_or(fields)
 }
 
-fn rows<'a>(chart: &Chart, document: &'a Value) -> Vec<&'a Value> {
-    let Some(name) = chart.data_source.as_deref() else {
+fn rows<'a>(chart: &Chart, document: &'a Value, root: &'a Value) -> Vec<&'a Value> {
+    let Some(source) = chart
+        .data_source
+        .as_deref()
+        .map(str::trim)
+        .filter(|source| !source.is_empty())
+    else {
         return vec![document];
     };
-    match document.get(name) {
-        Some(Value::Array(items)) => items.iter().collect(),
+    match crate::subreport::records_near(document, root, Some(source)) {
+        Ok(crate::subreport::Records::Many(items)) => items.iter().collect(),
         _ => Vec::new(),
     }
 }
@@ -108,10 +120,11 @@ fn label(
     expression: &str,
     fields: &[Field],
     data: &Value,
+    root: &Value,
     location: &str,
     warnings: &mut Vec<Warning>,
 ) -> Option<String> {
-    match eval(expression, fields, data, location, warnings)? {
+    match eval(expression, fields, data, root, location, warnings)? {
         ChartValue::Text(text) => Some(text),
         ChartValue::Number(value) => Some(number_text(value)),
     }
@@ -121,10 +134,11 @@ fn number(
     expression: &str,
     fields: &[Field],
     data: &Value,
+    root: &Value,
     location: &str,
     warnings: &mut Vec<Warning>,
 ) -> Option<f64> {
-    match eval(expression, fields, data, location, warnings)? {
+    match eval(expression, fields, data, root, location, warnings)? {
         ChartValue::Number(value) => Some(value),
         ChartValue::Text(text) => match text.parse::<f64>() {
             Ok(value) => Some(value),
@@ -148,6 +162,7 @@ fn eval(
     expression: &str,
     fields: &[Field],
     data: &Value,
+    root: &Value,
     location: &str,
     warnings: &mut Vec<Warning>,
 ) -> Option<ChartValue> {
@@ -155,7 +170,7 @@ fn eval(
         Expression::Text(text) => Some(ChartValue::Text(text)),
         Expression::Number(value) => Some(ChartValue::Number(value)),
         Expression::Field(name) => {
-            let filled = fill::field(&name, fields, data, location);
+            let filled = fill::field(&name, fields, data, root, location);
             if let Some(warning) = filled.warning {
                 warnings.push(warning);
                 return None;

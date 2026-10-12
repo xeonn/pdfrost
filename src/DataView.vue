@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { FwbButton } from "flowbite-vue";
 import JsonTree from "./JsonTree.vue";
-import { defaultPath, previewTable, readFields, type ReadField } from "./dataRows";
+import { defaultPath, previewTable, readFields, recordPath, valueAt, type ReadField } from "./dataRows";
 import type { Field } from "./report";
 
 const props = defineProps<{
   documentPath?: string;
   active?: boolean;
-  datasets?: { id: string; name: string; fields: Field[] }[];
+  datasets?: { id: string; name: string; listPath: string | null; fields: Field[] }[];
 }>();
 const emit = defineEmits<{
   pickDocument: [];
-  appendFields: [id: string, fields: ReadField[]];
+  appendFields: [id: string, fields: ReadField[], query?: string | null];
   changeField: [id: string, index: number, patch: { name?: string; className?: string; jsonPath?: string | null }];
   addField: [id: string];
   removeField: [id: string, index: number];
@@ -25,20 +25,40 @@ const path = ref("");
 const loadedPath = ref("");
 const datasetId = ref("report");
 const readMessage = ref("");
+const fieldHeight = ref(208);
+const rootEl = ref<HTMLElement | null>(null);
+const fieldListEl = ref<HTMLElement | null>(null);
+let fieldDrag: { startY: number; startHeight: number } | null = null;
 
 const datasets = computed(() => props.datasets ?? []);
 const current = computed(() => datasets.value.find((item) => item.id === datasetId.value) ?? null);
-const table = computed(() => (document.value === null ? null : previewTable(document.value, path.value)));
+const readTarget = computed(() => {
+  const chosen = current.value;
+  if (!chosen) {
+    return "";
+  }
+  if (chosen.id === "report") {
+    return chosen.listPath ? `Reads ${chosen.listPath}` : "Reads the root record";
+  }
+  if (chosen.listPath) {
+    return `Reads ${chosen.listPath}`;
+  }
+  return "Set the list on this dataset’s table or chart";
+});
+const page = ref(0);
+const table = computed(() => (document.value === null ? null : previewTable(document.value, path.value, page.value)));
 
 const summary = computed(() => {
   const rows = table.value;
-  if (!rows || rows.missing) {
+  if (!rows || rows.missing || rows.total === 0) {
     return "";
   }
-  if (rows.total > rows.rows.length) {
-    return `Showing ${rows.rows.length} of ${rows.total} records`;
+  if (rows.pageCount <= 1) {
+    return rows.total === 1 ? "1 record" : `${rows.total} records`;
   }
-  return rows.total === 1 ? "1 record" : `${rows.total} records`;
+  const start = rows.page * rows.pageSize + 1;
+  const end = start + rows.rows.length - 1;
+  return `${start}–${end} of ${rows.total}`;
 });
 
 const fileLabel = computed(() => fileName(props.documentPath ?? ""));
@@ -78,6 +98,22 @@ async function load(): Promise<void> {
   }
 }
 
+watch(path, () => {
+  page.value = 0;
+});
+
+watch(datasetId, () => {
+  const chosen = current.value;
+  if (!chosen || chosen.id === "report" || !chosen.listPath || document.value === null) {
+    return;
+  }
+  const record = Array.isArray(document.value) ? document.value[0] : document.value;
+  if (valueAt(record, chosen.listPath) === undefined) {
+    return;
+  }
+  path.value = Array.isArray(document.value) ? `0.${chosen.listPath}` : chosen.listPath;
+});
+
 watch(
   datasets,
   (list) => {
@@ -88,20 +124,100 @@ watch(
   { immediate: true },
 );
 
-function onReadFields(): void {
+async function onReadFields(): Promise<void> {
   readMessage.value = "";
-  if (document.value === null || !current.value) {
+  const chosen = current.value;
+  const doc = document.value;
+  if (doc === null || !chosen) {
     return;
   }
-  const found = readFields(document.value, path.value);
-  if (!found) {
-    readMessage.value = "That path is not in this file.";
+  if (chosen.id !== "report" && !chosen.listPath) {
+    readMessage.value = "Set the data path on this dataset’s table or chart.";
     return;
   }
-  emit("appendFields", current.value.id, found);
-  if (found.length === 0) {
-    readMessage.value = "No fields were found at this path.";
+  const record = Array.isArray(doc) ? doc[0] : doc;
+  if (chosen.id !== "report") {
+    const found = readFields(record, chosen.listPath ?? "");
+    if (!found) {
+      readMessage.value = `The list ${chosen.listPath} is not on the current record.`;
+      return;
+    }
+    emit("appendFields", chosen.id, found);
+    if (found.length === 0) {
+      readMessage.value = `${chosen.listPath} has no values.`;
+    }
+    return;
   }
+  const query = chosen.listPath;
+  const queryFields = query && valueAt(doc, query) !== undefined ? readFields(doc, query) : null;
+  if (query && queryFields && queryFields.length > 0) {
+    emit("appendFields", chosen.id, queryFields);
+    return;
+  }
+  const tablePath = path.value || defaultPath(doc);
+  const located =
+    recordPath(doc, tablePath) ?? (tablePath !== defaultPath(doc) ? recordPath(doc, defaultPath(doc)) : null);
+  if (!located) {
+    readMessage.value = "The root record has no values.";
+    return;
+  }
+  const found = readFields(doc, located);
+  if (!found || found.length === 0) {
+    readMessage.value = "The root record has no values.";
+    return;
+  }
+  const nextQuery = located === "" || located === "." ? null : located;
+  const queryChanged = (nextQuery ?? "") !== (query ?? "");
+  const before = chosen.fields.length;
+  emit("appendFields", chosen.id, found, queryChanged ? nextQuery : undefined);
+  await nextTick();
+  if ((current.value?.fields.length ?? 0) > before && fieldListEl.value) {
+    fieldListEl.value.scrollTop = fieldListEl.value.scrollHeight;
+  }
+}
+
+async function onAddField(): Promise<void> {
+  if (!current.value) {
+    return;
+  }
+  const before = current.value.fields.length;
+  emit("addField", current.value.id);
+  await nextTick();
+  if ((current.value?.fields.length ?? 0) <= before) {
+    return;
+  }
+  const list = fieldListEl.value;
+  if (!list) {
+    return;
+  }
+  list.scrollTop = list.scrollHeight;
+  const name = list.querySelector("tbody tr:last-child input");
+  if (name instanceof HTMLInputElement) {
+    name.focus();
+    name.select();
+  }
+}
+
+function clampFieldHeight(height: number): number {
+  const host = rootEl.value?.clientHeight ?? 600;
+  const max = Math.max(120, host - 120);
+  return Math.min(max, Math.max(120, Math.round(height)));
+}
+
+function onFieldResizeDown(event: PointerEvent): void {
+  fieldDrag = { startY: event.clientY, startHeight: fieldHeight.value };
+  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+}
+
+function onFieldResizeMove(event: PointerEvent): void {
+  if (!fieldDrag) {
+    return;
+  }
+  fieldHeight.value = clampFieldHeight(fieldDrag.startHeight + (fieldDrag.startY - event.clientY));
+}
+
+function onFieldResizeUp(): void {
+  fieldDrag = null;
 }
 
 const fieldInput =
@@ -114,7 +230,7 @@ function fileName(file: string): string {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col bg-slate-950">
+  <div ref="rootEl" class="flex min-h-0 flex-1 flex-col bg-slate-950">
     <div class="flex h-10 shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-900 px-3">
       <span class="shrink-0 text-xs text-gray-400">JSON file</span>
       <span class="max-w-48 truncate text-xs text-gray-200" :title="documentPath">{{ fileLabel || "None" }}</span>
@@ -130,6 +246,24 @@ function fileName(file: string): string {
       </label>
       <FwbButton size="xs" color="alternative" :disabled="!documentPath" @click="load">Refresh</FwbButton>
       <span v-if="summary" class="shrink-0 text-xs text-gray-400">{{ summary }}</span>
+      <FwbButton
+        v-if="table && table.pageCount > 1"
+        size="xs"
+        color="alternative"
+        :disabled="table.page === 0"
+        @click="page = Math.max(0, page - 1)"
+      >
+        Previous
+      </FwbButton>
+      <FwbButton
+        v-if="table && table.pageCount > 1"
+        size="xs"
+        color="alternative"
+        :disabled="table.page >= table.pageCount - 1"
+        @click="page = table.page + 1"
+      >
+        Next
+      </FwbButton>
     </div>
 
     <div v-if="!documentPath" class="flex flex-1 items-center justify-center px-6 text-sm text-gray-400">
@@ -161,7 +295,7 @@ function fileName(file: string): string {
           </thead>
           <tbody>
             <tr v-for="(row, index) in table.rows" :key="index" class="odd:bg-slate-950 even:bg-slate-900/70">
-              <td class="border-b border-slate-800 px-2 py-1 text-gray-500">{{ index + 1 }}</td>
+              <td class="border-b border-slate-800 px-2 py-1 text-gray-500">{{ table.page * table.pageSize + index + 1 }}</td>
               <td
                 v-for="(cell, cellIndex) in row"
                 :key="cellIndex"
@@ -176,7 +310,20 @@ function fileName(file: string): string {
       </div>
     </div>
 
-    <section class="flex h-52 shrink-0 flex-col border-t border-slate-800 bg-slate-900">
+    <section
+      class="relative flex shrink-0 flex-col border-t border-slate-800 bg-slate-900"
+      :style="{ height: `${fieldHeight}px` }"
+    >
+      <div
+        class="absolute -top-1 right-0 left-0 z-20 h-2 cursor-row-resize hover:bg-blue-500"
+        role="separator"
+        aria-orientation="horizontal"
+        title="Resize fields"
+        @pointerdown="onFieldResizeDown"
+        @pointermove="onFieldResizeMove"
+        @pointerup="onFieldResizeUp"
+        @pointercancel="onFieldResizeUp"
+      />
       <div class="flex h-10 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
         <span class="text-xs font-medium text-gray-200">Fields</span>
         <select
@@ -188,15 +335,16 @@ function fileName(file: string): string {
         </select>
         <span v-else-if="current" class="truncate text-xs text-gray-400">{{ current.name }}</span>
         <FwbButton size="xs" :disabled="document === null || !current" @click="onReadFields">Read Fields</FwbButton>
-        <FwbButton size="xs" color="alternative" :disabled="!current" @click="current && emit('addField', current.id)">
+        <FwbButton size="xs" color="alternative" :disabled="!current" @click="onAddField">
           Add field
         </FwbButton>
+        <span v-if="readTarget" class="truncate text-xs text-gray-500">{{ readTarget }}</span>
         <span v-if="readMessage" class="truncate text-xs text-amber-400">{{ readMessage }}</span>
       </div>
-      <div class="min-h-0 flex-1 overflow-auto">
+      <div ref="fieldListEl" class="min-h-0 flex-1 overflow-auto">
         <p v-if="!current" class="p-3 text-xs text-gray-500">Open a report to edit its fields.</p>
         <p v-else-if="current.fields.length === 0" class="p-3 text-xs text-gray-500">
-          This dataset has no fields. Read Fields adds the columns at the data path.
+          This dataset has no fields. Read Fields adds columns from the record this dataset fills.
         </p>
         <table v-else class="w-full border-collapse text-left text-xs">
           <thead class="sticky top-0 bg-slate-900">

@@ -23,11 +23,11 @@ Opening a Studio file and saving it is lossy. `write_report` emits the supported
 1. Open a `.jrxml` the engine already parses and show its bands and elements on the Design tab.
 2. Change page size, margins, static text, text fields, images, lines, rectangles, and a simple table.
 3. Save a `.jrxml` that `parse` accepts and that Preview renders without hand-written XML.
-4. Keep Design, Source, and Preview as views of one template, the way Studio’s editor tabs do. Dataset, beside File, is the JSON file, the data path, the tree, and the table. Read Fields adds columns from that path that are not already in the field list. A field is removed only by hand. The Outline shows that same list.
+4. Keep Design, Source, and Preview as views of one template, the way Studio’s editor tabs do. Dataset, beside File, is the JSON file, the data path, the tree, and the table. Read Fields adds columns from the report query, or from the first list when the root has none, and stores that list as the query. A dataset’s list columns go to that dataset. A nested object becomes a path from the document root, such as `(root).Northwind.Customers.Address`. A field is removed only by hand. The Outline shows that same list.
 
 ## Reference
 
-Studio’s report editor (6.20, Report Design) has three tabs: **Design**, **Source**, **Preview**. This app uses those three. **Dataset**, beside File, is the JSON file as a tree, and the chosen list as one row per object. **Read Fields** adds those columns to the field list for the report, or for one of its datasets, and leaves names that are already there. The Outline shows that same list. Design is the tab this plan fills in.
+Studio’s report editor (6.20, Report Design) has three tabs: **Design**, **Source**, **Preview**. This app uses those three. **Dataset**, beside File, is the JSON file as a tree, and the chosen list as one row per object. **Read Fields** adds columns from the report query to the report’s field list. When the root has no values, it reads the first list and stores that path as the query. For a table or chart dataset, it adds columns from the list named on that element. A nested object becomes a path from the document root, such as `(root).Northwind.Customers.Address`. Names that are already there stay. The Outline shows that same list. Design is the tab this plan fills in.
 
 On Design, Studio arranges the work like this:
 

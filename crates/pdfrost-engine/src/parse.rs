@@ -1,7 +1,8 @@
 //! Read a JRXML subset into [`Report`](crate::model::Report).
 //!
-//! Supported tags become fields on the model. Studio properties, `queryString`,
-//! and dataset `group` tags are dropped. Every other tag becomes a [`Warning`](crate::Warning).
+//! Supported tags become fields on the model. Studio properties and dataset
+//! `group` tags are dropped. A JSON `queryString` is the main record path.
+//! Every other tag becomes a [`Warning`](crate::Warning).
 
 use roxmltree::Node;
 
@@ -84,6 +85,7 @@ pub fn parse(template_xml: &str) -> Result<Report, Error> {
         bottom_margin: parser.f32_attr(root, "bottomMargin", "jasperReport"),
         styles: Vec::new(),
         fields: Vec::new(),
+        query: None,
         subdatasets: Vec::new(),
         bands: Vec::new(),
         warnings: Vec::new(),
@@ -99,7 +101,12 @@ pub fn parse(template_xml: &str) -> Result<Report, Error> {
             }
             "subDataset" => report.subdatasets.push(parser.parse_subdataset(child)),
             "field" => report.fields.push(parser.parse_field(child, "field")),
-            "queryString" => {}
+            "queryString" => {
+                let text = element_text(child);
+                if !text.is_empty() {
+                    report.query = Some(text);
+                }
+            }
             "property" => {
                 parser.note_property(child, "property");
             }

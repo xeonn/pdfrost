@@ -38,6 +38,7 @@ fn a_small_report_round_trips_through_the_writer() {
             description: None,
             json_path: Some("docno".to_string()),
         }],
+        query: None,
         subdatasets: vec![SubDataset {
             name: "Items".to_string(),
             fields: vec![Field {
