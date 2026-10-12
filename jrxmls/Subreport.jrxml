@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fill with SubreportData.json. The detail band repeats OrderLines.jrxml over orders. -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="Subreport" pageWidth="595" pageHeight="842" columnWidth="555" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+	<field name="company" class="java.lang.String"/>
+	<field name="contact" class="java.lang.String"/>
+	<title>
+		<band height="72" splitType="Stretch">
+			<staticText>
+				<reportElement x="0" y="0" width="240" height="22"/>
+				<textElement>
+					<font size="14" isBold="true"/>
+				</textElement>
+				<text><![CDATA[Orders]]></text>
+			</staticText>
+			<staticText>
+				<reportElement x="0" y="30" width="70" height="16"/>
+				<text><![CDATA[Company]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="80" y="30" width="240" height="16"/>
+				<textFieldExpression><![CDATA[$F{company}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement x="0" y="50" width="70" height="16"/>
+				<text><![CDATA[Contact]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="80" y="50" width="240" height="16"/>
+				<textFieldExpression><![CDATA[$F{contact}]]></textFieldExpression>
+			</textField>
+		</band>
+	</title>
+	<detail>
+		<band height="40" splitType="Stretch">
+			<subreport>
+				<reportElement x="0" y="0" width="555" height="40"/>
+				<dataSourceExpression><![CDATA[subDataSource("orders")]]></dataSourceExpression>
+				<subreportExpression><![CDATA["OrderLines.jrxml"]]></subreportExpression>
+			</subreport>
+		</band>
+	</detail>
+</jasperReport>

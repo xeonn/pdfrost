@@ -2,7 +2,7 @@
 
 Plot category charts inside the `reportElement` box. JasperReports 6.20.1 is the behavior reference. `jrxmls/Sample.jrxml` is the first template: its summary band holds one of each supported chart.
 
-`areaChart`, `barChart`, `lineChart`, `stackedAreaChart`, and `stackedBarChart` are parsed, filled, and painted. `Sample.jrxml` draws all five from `chartPoints` and does not warn `chart` when that array is present. Design shows the tag and the series expressions. The palette still has no Chart tool. Any other chart tag keeps the gray placeholder and the `chart` warning.
+`areaChart`, `barChart`, `lineChart`, `stackedAreaChart`, and `stackedBarChart` are parsed, filled, and painted. `Sample.jrxml` draws all five from `chartPoints` and does not warn `chart` when that array is present. Design can drop a bar chart from the palette and edit its kind, title, legend, evaluation time, data array, and series. Any other chart tag keeps the gray placeholder and the `chart` warning.
 
 ## Recommendation
 
@@ -16,7 +16,7 @@ Three choices follow from the engine that already exists.
 
 **The chart is data on `Chart`, filled like a text field, painted like a rectangle.** Parse stores the box, the element tag, the dataset, and the title. Fill turns expressions into category points. Layout keeps the box where the template put it. Export strokes and fills the plot in that box. The Tauri shell and the Go package keep calling `render`. They do not learn a chart type of their own.
 
-**Multi-point data uses `subDataSource`, the same call a table uses.** pdfrost has one main JSON object. A chart with no dataset run evaluates each series once against that object. A chart whose dataset run is `subDataSource("…")` evaluates category and value once per object in that array. The operational templates use `itemsList` for tables. A chart can use the same array. `Sample.jrxml` uses `subDataSource("chartPoints")` and two series, `Units` and `Returns`, over the months in that array.
+**Multi-point data uses `subDataSource`, the same call a table uses.** A chart with no dataset run evaluates each series once against the current main record. An object has one main record. An array has one main record per element. A chart whose dataset run is `subDataSource("…")` evaluates category and value once per object in that array. The operational templates use `itemsList` for tables. A chart can use the same array. `Sample.jrxml` uses `subDataSource("chartPoints")` and two series, `Units` and `Returns`, over the months in that array.
 
 **Ship one kind that `Sample.jrxml` can show, then the kinds that share its dataset.** `areaChart` is first. `barChart` and `lineChart` use the same `categoryDataset` and a different plot. Stacked area and stacked bar come after the plain shapes. A kind this plan does not draw keeps today's placeholder and the `chart` warning.
 
@@ -134,7 +134,7 @@ Parse of that XML returns the same series, box, and flags. Sample's studio prope
 
 ## Design
 
-The canvas keeps a box. The label is the tag (`areaChart`). Properties show the kind and the series expressions as read-only text. The palette still has no Chart tool. Bounds stay editable, the same as today, so the box can move. Delete stays disabled for a chart until a later pass can create one.
+The canvas keeps a box labeled with the chart kind. The palette Chart tool drops a 200×200 bar chart with evaluation time Report and one series (`"SERIES 1"`, category `0`, value `0`). Properties edit the kind, title, subtitle, legend, evaluation time, the `subDataSource` array name, and the series expressions. A named array creates a subdataset and adds each `$F{name}` the series uses. Delete removes the chart.
 
 Preview is where the plot appears. Design does not fill `$F{…}`.
 
@@ -174,7 +174,6 @@ These steps are in the tree. `Sample.jrxml` plots area, bar, line, stacked area,
 - Pie, 3D, XY, scatter, bubble, time series, high-low, candlestick, meter, thermometer, Gantt, spider, and multi-axis charts
 - Chart customizers, themes, hyperlinks, and `renderType` of image or svg
 - Axis masks, tick fonts, plot orientation, and `seriesColor` (the default palette covers color until a template needs its own)
-- A palette tool that inserts a chart, and deleting a chart from Design
 - JFreeChart's gradient bar painter, and embedding Tahoma itself. Fills use the Chart.js color at 50% alpha. The face is the caller's, at 20 pt bold for the title and 12 pt for ticks and the legend
 - Page X of Y, images, and the other gaps already listed in [JRXML subset](jrxml-subset.md)
 

@@ -52,6 +52,7 @@ fn sample_chart_series_round_trips_through_the_writer() {
     assert_eq!(after.series, before.series);
     assert_eq!(after.evaluation_time, before.evaluation_time);
     assert_eq!(after.show_legend, before.show_legend);
+    assert_eq!(again.query.as_deref(), Some("Northwind.Customers"));
 }
 
 #[test]
@@ -105,6 +106,32 @@ fn a_subdataset_bar_plots_one_point_per_row() {
     assert!(text.contains("Bolt"), "{text}");
     assert!(text.contains("Nut"), "{text}");
     assert!(text.contains("Qty"), "{text}");
+}
+
+#[test]
+fn a_dotted_list_path_plots_one_point_per_row() {
+    let template = chart_report(
+        "barChart",
+        r#"<categoryDataset>
+          <dataset>
+            <datasetRun>
+              <dataSourceExpression><![CDATA[subDataSource("customer.orders")]]></dataSourceExpression>
+            </datasetRun>
+          </dataset>
+          <categorySeries>
+            <seriesExpression><![CDATA["Qty"]]></seriesExpression>
+            <categoryExpression><![CDATA[$F{sku}]]></categoryExpression>
+            <valueExpression><![CDATA[$F{qty}]]></valueExpression>
+          </categorySeries>
+        </categoryDataset>"#,
+    );
+    let output = render_xml(
+        &template,
+        json!({"customer": {"orders": [{"sku": "Bolt", "qty": 1}]}}),
+    );
+    assert!(output.warnings.iter().all(|warning| warning.tag != "chart"));
+    let text = pdf_extract::extract_text_from_mem(&output.pdf).unwrap();
+    assert!(text.contains("Bolt"), "{text}");
 }
 
 #[test]
@@ -162,4 +189,39 @@ fn a_pie_chart_stays_a_placeholder_and_a_warning() {
         .find(|placement| placement.kind == PlacementKind::Chart)
         .unwrap();
     assert_eq!(chart.text.as_deref(), Some("Chart"));
+}
+
+#[test]
+fn sample_query_fills_customers_and_the_root_chart() {
+    let template = include_str!("../../../jrxmls/Sample.jrxml");
+    let document = serde_json::from_str(include_str!("../../../jrxmls/SampleData.json")).unwrap();
+    let output = render_xml(template, document);
+    let text = pdf_extract::extract_text_from_mem(&output.pdf).unwrap();
+    assert!(text.contains("Alfreds Futterkiste"), "{text}");
+    assert!(text.contains("Maria Anders"), "{text}");
+    assert!(text.contains("Jan"), "{text}");
+}
+
+#[test]
+fn an_absolute_field_path_prints_each_customer() {
+    let template = r#"<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport name="Customers" pageWidth="400" pageHeight="400" columnWidth="360" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+  <queryString language="JSON">Northwind.Customers</queryString>
+  <field name="CompanyName" class="java.lang.String">
+    <property name="net.sf.jasperreports.json.field.expression" value="(root).Northwind.Customers.CompanyName"/>
+  </field>
+  <detail>
+    <band height="20" splitType="Stretch">
+      <textField>
+        <reportElement x="0" y="0" width="220" height="20"/>
+        <textFieldExpression><![CDATA[$F{CompanyName}]]></textFieldExpression>
+      </textField>
+    </band>
+  </detail>
+</jasperReport>"#;
+    let document = serde_json::from_str(include_str!("../../../jrxmls/SampleData.json")).unwrap();
+    let output = render_xml(template, document);
+    let text = pdf_extract::extract_text_from_mem(&output.pdf).unwrap();
+    assert!(text.contains("Alfreds Futterkiste"), "{text}");
+    assert!(text.contains("Wolski"), "{text}");
 }

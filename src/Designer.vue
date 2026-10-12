@@ -1,31 +1,42 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { FwbButton, FwbButtonGroup, FwbP } from "flowbite-vue";
 import Icon from "./Icon.vue";
+import JsonTree from "./JsonTree.vue";
 import {
   BAND_LABEL,
-  BAND_ORDER,
+  BAND_CANVAS,
+  blankReport,
+  CHART_KINDS,
   SECTION_LABEL,
   type SectionKind,
   addColumn,
   addDatasetField,
   addMainField,
   applyResize,
+  bindChartSource,
   borderColor,
   borderWidth,
+  chartChoices,
+  chartExpression,
   clampElement,
   colorFromHex,
   contentBottom,
   elementLabel,
+  ensureBand,
   expressionChoices,
+  datasetListPath,
+  fieldsFromDiscovery,
+  applyStudioExpressions,
   hexColor,
   nudge,
   orderedSections,
   placeElement,
   placeField,
   plotsChart,
+  rememberChartFields,
   removeColumn,
   sectionByKind,
   setBorderColor,
@@ -37,8 +48,10 @@ import {
   syncTableBox,
   tableSectionKinds,
   type BandKind,
+  type CategorySeries,
   type ColumnSection,
   type Element,
+  type Field,
   type Handle,
   type Report,
   type ReportElement,
@@ -46,8 +59,13 @@ import {
   type Warning,
 } from "./report";
 
-const props = defineProps<{ templatePath: string; active?: boolean }>();
-const emit = defineEmits<{ saved: [path: string]; create: [] }>();
+const props = defineProps<{ templatePath: string; documentPath?: string; active?: boolean }>();
+const emit = defineEmits<{
+  saved: [path: string];
+  openTemplate: [path: string];
+  openDataset: [];
+  datasets: [datasets: { id: string; name: string; listPath: string | null; fields: Field[] }[]];
+}>();
 
 type Selection =
   | { kind: "report" }
@@ -90,25 +108,36 @@ const inspectorOpen = ref(true);
 const outlineWidth = ref(224);
 const inspectorWidth = ref(288);
 const dropBand = ref<number | null>(null);
+const bandToAdd = ref<BandKind | "">("");
+const EMPTY_STRIP = 18;
 const DRAG_TOOL = "application/pdfrost-tool";
 const DRAG_FIELD = "application/pdfrost-field";
 const error = ref("");
 const loading = ref(false);
 const saving = ref(false);
+const status = ref("");
+let keepOpenPath = "";
 const loadWarnings = ref<Warning[]>([]);
 const lossyConfirmed = ref(true);
 const confirmedPaths = new Set<string>();
 const savedSnapshot = ref("");
+const imagePreviews = ref<Record<string, string>>({});
+let imagePreviewTicket = 0;
 const undoStack = ref<string[]>([]);
 const editing = ref<{ band: number; index: number } | null>(null);
 const textDraft = ref("");
-const palette: { id: Tool; label: string; icon: "type" | "field" | "minus" | "square" | "table" }[] = [
+const palette: { id: Tool; label: string; icon: "type" | "field" | "image" | "minus" | "square" | "table" | "chart" | "subreport" }[] = [
   { id: "staticText", label: "Static Text", icon: "type" },
   { id: "textField", label: "Text Field", icon: "field" },
+  { id: "image", label: "Image", icon: "image" },
   { id: "line", label: "Line", icon: "minus" },
   { id: "rectangle", label: "Rectangle", icon: "square" },
+  { id: "chart", label: "Chart", icon: "chart" },
+  { id: "subreport", label: "Subreport", icon: "subreport" },
   { id: "table", label: "Table", icon: "table" },
 ];
+const jsonDocument = ref<unknown>(null);
+const jsonError = ref("");
 let generation = 0;
 let drag: Drag | null = null;
 let panelDrag: { side: "outline" | "inspector"; startX: number; startWidth: number } | null = null;
@@ -131,14 +160,21 @@ const bandRows = computed(() => {
   if (!report.value) {
     return [];
   }
-  return BAND_ORDER.flatMap((kind) => {
+  return BAND_CANVAS.flatMap((kind) => {
     const index = report.value!.bands.findIndex((band) => band.kind === kind);
     return index < 0 ? [] : [{ index, band: report.value!.bands[index] }];
   });
 });
 const designedHeight = computed(() => {
-  const bands = bandRows.value.reduce((sum, row) => sum + row.band.height, 0);
+  const bands = bandRows.value.reduce((sum, row) => sum + stripHeight(row.band.height), 0);
   return topMargin.value + bands + bottomMargin.value;
+});
+const missingBands = computed(() => {
+  if (!report.value) {
+    return [];
+  }
+  const present = new Set(report.value.bands.map((band) => band.kind));
+  return BAND_CANVAS.filter((kind) => !present.has(kind));
 });
 const sheetHeight = computed(() => {
   if (!report.value) {
@@ -163,14 +199,14 @@ const bandMonitor = computed(() => {
     if (row.index === selection.value.index) {
       break;
     }
-    start += row.band.height;
+    start += stripHeight(row.band.height);
   }
-  const end = start + selectedBand.value.height;
+  const end = start + stripHeight(selectedBand.value.height);
   const pageEdge = report.value.pageHeight;
   const contentLimit = Math.max(0, pageEdge - topMargin.value - bottomMargin.value);
   const stack = bandRows.value
     .filter((row) => row.band.kind !== "background")
-    .reduce((sum, row) => sum + row.band.height, 0);
+    .reduce((sum, row) => sum + stripHeight(row.band.height), 0);
   return {
     start,
     end,
@@ -531,6 +567,10 @@ function bandLabel(kind: string): string {
   return BAND_LABEL[kind as BandKind] ?? kind;
 }
 
+function stripHeight(height: number): number {
+  return height > 0 ? height : EMPTY_STRIP;
+}
+
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -553,6 +593,7 @@ function dropNoopUndo(): void {
 }
 
 function edit(mutate: () => void): void {
+  status.value = "";
   pushUndo();
   mutate();
   dropNoopUndo();
@@ -563,6 +604,7 @@ function undo(): void {
   if (!previous) {
     return;
   }
+  status.value = "";
   report.value = JSON.parse(previous) as Report;
   editing.value = null;
 }
@@ -615,6 +657,7 @@ async function load(): Promise<void> {
       return;
     }
     syncColumn(loaded);
+    applyStudioExpressions(loaded);
     report.value = loaded;
     savedSnapshot.value = JSON.stringify(loaded);
     loadWarnings.value = loaded.warnings.map((warning) => ({ ...warning }));
@@ -668,7 +711,12 @@ async function saveDesign(asNew: boolean): Promise<void> {
   try {
     await invoke("save_report", { path, report: report.value });
     savedSnapshot.value = JSON.stringify(report.value);
+    status.value = "Saved";
+    keepOpenPath = path;
     emit("saved", path);
+    if (props.templatePath === path) {
+      keepOpenPath = "";
+    }
   } catch (err) {
     error.value = message(err);
   } finally {
@@ -684,6 +732,26 @@ function onToolDragStart(event: DragEvent, id: Tool): void {
   }
 }
 
+function toolFromDrop(transfer: DataTransfer | null): Tool | null {
+  if (!transfer) {
+    return null;
+  }
+  const id = transfer.getData(DRAG_TOOL) || transfer.getData("text/plain");
+  return palette.some((item) => item.id === id) ? (id as Tool) : null;
+}
+
+function addBand(): void {
+  if (!report.value || !bandToAdd.value) {
+    return;
+  }
+  const kind = bandToAdd.value;
+  edit(() => {
+    const index = ensureBand(report.value!, kind);
+    selection.value = { kind: "band", index };
+  });
+  bandToAdd.value = "";
+}
+
 function onFieldDragStart(event: DragEvent, name: string): void {
   event.dataTransfer?.setData(DRAG_FIELD, name);
   event.dataTransfer?.setData("text/plain", name);
@@ -692,46 +760,64 @@ function onFieldDragStart(event: DragEvent, name: string): void {
   }
 }
 
-function onBandDragOver(event: DragEvent, bandIndex: number): void {
+function bandAtPoint(clientX: number, clientY: number): { index: number; x: number; y: number } | null {
+  const root = sheetEl.value;
+  if (!root) {
+    return null;
+  }
+  for (const row of root.querySelectorAll<HTMLElement>("[data-band-index]")) {
+    const content = row.querySelector<HTMLElement>("[data-band-content]") ?? row;
+    const bounds = content.getBoundingClientRect();
+    if (clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom) {
+      continue;
+    }
+    const index = Number(row.dataset.bandIndex);
+    if (!Number.isInteger(index)) {
+      return null;
+    }
+    return {
+      index,
+      x: (clientX - bounds.left) / scale.value,
+      y: (clientY - bounds.top) / scale.value,
+    };
+  }
+  return null;
+}
+
+function onCanvasDragOver(event: DragEvent): void {
   if (!event.dataTransfer) {
     return;
   }
   event.preventDefault();
   event.dataTransfer.dropEffect = "copy";
-  dropBand.value = bandIndex;
+  dropBand.value = bandAtPoint(event.clientX, event.clientY)?.index ?? null;
 }
 
-function onBandDragLeave(event: DragEvent, bandIndex: number): void {
+function onCanvasDragLeave(event: DragEvent): void {
   const next = event.relatedTarget as Node | null;
   if (next && (event.currentTarget as HTMLElement).contains(next)) {
     return;
   }
-  if (dropBand.value === bandIndex) {
-    dropBand.value = null;
-  }
+  dropBand.value = null;
 }
 
-function onBandDrop(event: DragEvent, bandIndex: number): void {
+function onCanvasDrop(event: DragEvent): void {
   event.preventDefault();
+  const hit = bandAtPoint(event.clientX, event.clientY);
   dropBand.value = null;
-  if (!report.value) {
+  if (!hit || !report.value) {
     return;
   }
-  const droppedTool = event.dataTransfer?.getData(DRAG_TOOL) ?? "";
   const fieldName = event.dataTransfer?.getData(DRAG_FIELD) ?? "";
-  const armed = palette.some((item) => item.id === droppedTool) ? (droppedTool as Tool) : null;
+  const armed = toolFromDrop(event.dataTransfer);
   if (!armed && !fieldName) {
     return;
   }
-  const content = (event.currentTarget as HTMLElement).querySelector("[data-band-content]");
-  const bounds = (content instanceof HTMLElement ? content : (event.currentTarget as HTMLElement)).getBoundingClientRect();
-  const x = (event.clientX - bounds.left) / scale.value;
-  const y = (event.clientY - bounds.top) / scale.value;
   edit(() => {
     const index = armed
-      ? placeElement(report.value!, bandIndex, armed, x, y)
+      ? placeElement(report.value!, hit.index, armed, hit.x, hit.y)
       : fieldName
-        ? placeField(report.value!, bandIndex, fieldName, x, y)
+        ? placeField(report.value!, hit.index, fieldName, hit.x, hit.y)
         : null;
     if (index === null) {
       if (armed === "table") {
@@ -740,7 +826,7 @@ function onBandDrop(event: DragEvent, bandIndex: number): void {
       return;
     }
     error.value = "";
-    selection.value = { kind: "element", band: bandIndex, index };
+    selection.value = { kind: "element", band: hit.index, index };
     tool.value = null;
   });
 }
@@ -935,6 +1021,142 @@ function sectionLabel(kind: SectionKind): string {
   return SECTION_LABEL[kind];
 }
 
+function chartKindLabel(kind: string): string {
+  return CHART_KINDS.find((item) => item.id === kind)?.label ?? kind;
+}
+
+async function loadJson(path: string): Promise<void> {
+  jsonDocument.value = null;
+  jsonError.value = "";
+  if (!path) {
+    return;
+  }
+  try {
+    const text = await invoke<string>("read_template", { path });
+    jsonDocument.value = JSON.parse(text) as unknown;
+  } catch (err) {
+    jsonError.value = message(err);
+  }
+}
+
+function directoryOf(file: string): string {
+  const index = Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\"));
+  return index >= 0 ? file.slice(0, index) : "";
+}
+
+function joinPath(dir: string, rel: string): string {
+  if (!rel || rel.startsWith("/") || /^[A-Za-z]:[\\/]/.test(rel)) {
+    return rel;
+  }
+  const slash = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
+  const parts = `${dir}${slash}${rel}`.split(/[/\\]/);
+  const stack: string[] = [];
+  for (const part of parts) {
+    if (!part || part === ".") {
+      continue;
+    }
+    if (part === "..") {
+      stack.pop();
+    } else {
+      stack.push(part);
+    }
+  }
+  return `${dir.startsWith("/") ? "/" : ""}${stack.join(slash)}`;
+}
+
+function relativePath(fromDir: string, target: string): string {
+  const slash = fromDir.includes("\\") && !fromDir.includes("/") ? "\\" : "/";
+  const from = fromDir.split(/[/\\]/).filter(Boolean);
+  const to = target.split(/[/\\]/).filter(Boolean);
+  let shared = 0;
+  while (shared < from.length && shared < to.length && from[shared] === to[shared]) {
+    shared += 1;
+  }
+  return [...from.slice(shared).map(() => ".."), ...to.slice(shared)].join(slash) || target;
+}
+
+function subreportPathText(expression: string): string {
+  const trimmed = expression.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
+    return trimmed.slice(1, -1).replace(/\\"/g, '"');
+  }
+  return trimmed;
+}
+
+function setSubreportSource(path: string): void {
+  edit(() => {
+    if (editedElement.value?.type === "subreport") {
+      editedElement.value.dataSource = path.trim() || null;
+    }
+  });
+}
+
+async function browseSubreport(): Promise<void> {
+  const picked = await open({ multiple: false, filters: [{ name: "JRXML", extensions: ["jrxml"] }] });
+  if (typeof picked !== "string") {
+    return;
+  }
+  const relative = props.templatePath ? relativePath(directoryOf(props.templatePath), picked) : picked;
+  edit(() => {
+    if (editedElement.value?.type === "subreport") {
+      editedElement.value.expression = chartExpression(relative);
+    }
+  });
+}
+
+async function createSubreport(): Promise<void> {
+  const suggested = props.templatePath ? joinPath(directoryOf(props.templatePath), "subreport.jrxml") : "subreport.jrxml";
+  const picked = await save({ defaultPath: suggested, filters: [{ name: "JRXML", extensions: ["jrxml"] }] });
+  if (typeof picked !== "string") {
+    return;
+  }
+  try {
+    await invoke("save_report", { path: picked, report: blankReport() });
+  } catch (err) {
+    error.value = message(err);
+    return;
+  }
+  const relative = props.templatePath ? relativePath(directoryOf(props.templatePath), picked) : picked;
+  edit(() => {
+    if (editedElement.value?.type === "subreport") {
+      editedElement.value.expression = chartExpression(relative);
+    }
+  });
+}
+
+function openSubreport(expression: string): void {
+  const text = subreportPathText(expression);
+  if (!text || !props.templatePath) {
+    return;
+  }
+  const file = text.endsWith(".jasper") ? `${text.slice(0, -".jasper".length)}.jrxml` : text;
+  emit("openTemplate", joinPath(directoryOf(props.templatePath), file));
+}
+
+function setChartExpression(
+  chart: Extract<Element, { type: "chart" }>,
+  series: CategorySeries,
+  key: "seriesExpression" | "categoryExpression" | "valueExpression",
+  value: string,
+): void {
+  if (!report.value) {
+    return;
+  }
+  series[key] = chartExpression(value);
+  rememberChartFields(report.value, chart);
+}
+
+function addChartSeries(chart: Extract<Element, { type: "chart" }>): void {
+  const series = chart.series ?? [];
+  chart.series = series;
+  const index = series.length + 1;
+  series.push({
+    seriesExpression: `"SERIES ${index}"`,
+    categoryExpression: series[0]?.categoryExpression ?? "0",
+    valueExpression: "0",
+  });
+}
+
 function clampEdited(element: ReportElement): void {
   if (!report.value) {
     return;
@@ -961,6 +1183,13 @@ function removeSelected(): void {
     return;
   }
   const current = selection.value;
+  if (current.kind === "band") {
+    edit(() => {
+      report.value!.bands.splice(current.index, 1);
+    });
+    selection.value = { kind: "report" };
+    return;
+  }
   if (current.kind === "element") {
     edit(() => {
       report.value!.bands[current.band].elements.splice(current.index, 1);
@@ -1022,11 +1251,6 @@ function onKeydown(event: KeyboardEvent): void {
   }
   const target = event.target as HTMLElement | null;
   const typing = !!target?.closest("input, textarea, select");
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-    event.preventDefault();
-    void saveDesign(false);
-    return;
-  }
   if ((event.metaKey || event.ctrlKey) && (event.key === "=" || event.key === "+")) {
     event.preventDefault();
     zoomBy(1);
@@ -1136,6 +1360,95 @@ function borderStyle(element: Element): Record<string, string> {
     borderStyle: "solid",
     borderColor: hexColor(borderColor(element.element)),
   };
+}
+
+function quotedImageSource(expression: string): string {
+  const trimmed = expression.trim();
+  if (trimmed.length < 2 || !trimmed.startsWith('"') || !trimmed.endsWith('"')) {
+    return "";
+  }
+  return trimmed.slice(1, -1);
+}
+
+function imageObjectStyle(element: Element): Record<string, string> {
+  if (element.type !== "image") {
+    return {};
+  }
+  const scale = element.scaleImage ?? "retainShape";
+  const fit = scale === "fillFrame" ? "fill" : scale === "clip" ? "none" : "contain";
+  const horizontal = element.hAlign === "center" ? "center" : element.hAlign === "right" ? "right" : "left";
+  const vertical = element.vAlign === "middle" ? "center" : element.vAlign === "bottom" ? "bottom" : "top";
+  const deg = element.rotation === "left" ? -90 : element.rotation === "right" ? 90 : element.rotation === "upsideDown" ? 180 : 0;
+  return {
+    objectFit: fit,
+    objectPosition: `${horizontal} ${vertical}`,
+    transform: deg ? `rotate(${deg}deg)` : "none",
+  };
+}
+
+function quotedImageSources(elements: Element[]): string[] {
+  const found: string[] = [];
+  for (const element of elements) {
+    if (element.type === "image") {
+      const source = quotedImageSource(element.expression);
+      if (source) {
+        found.push(source);
+      }
+    }
+    if (element.type === "table") {
+      for (const column of element.columns) {
+        for (const section of column.sections) {
+          found.push(...quotedImageSources(section.elements));
+        }
+      }
+    }
+  }
+  return found;
+}
+
+function imagePreview(element: Element): string {
+  if (element.type !== "image") {
+    return "";
+  }
+  const source = quotedImageSource(element.expression);
+  return source ? (imagePreviews.value[source] ?? "") : "";
+}
+
+async function loadImagePreviews(): Promise<void> {
+  const ticket = ++imagePreviewTicket;
+  const sources = new Set(quotedImageSources((report.value?.bands ?? []).flatMap((band) => band.elements)));
+  const next: Record<string, string> = {};
+  await Promise.all(
+    [...sources].map(async (source) => {
+      if (/^https?:\/\//i.test(source) || source.startsWith("data:")) {
+        next[source] = source;
+        return;
+      }
+      if (!props.templatePath) {
+        next[source] = "";
+        return;
+      }
+      try {
+        next[source] = await invoke<string>("read_image", {
+          templatePath: props.templatePath,
+          source,
+        });
+      } catch {
+        next[source] = "";
+      }
+    }),
+  );
+  if (ticket === imagePreviewTicket) {
+    imagePreviews.value = next;
+  }
+}
+
+function commitImageExpression(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.startsWith('"') || trimmed.startsWith("$") || trimmed.includes("(")) {
+    return trimmed;
+  }
+  return `"${trimmed.replaceAll('"', "")}"`;
 }
 
 function fillStyle(element: Element): Record<string, string> {
@@ -1521,14 +1834,174 @@ function isDirty(): boolean {
   return dirty.value;
 }
 
-defineExpose({ confirmDiscardIfDirty, discardChanges, isDirty });
+function fieldsFor(id: string): Field[] | null {
+  if (!report.value) {
+    return null;
+  }
+  if (id === "report") {
+    return report.value.fields;
+  }
+  const index = Number(id);
+  return report.value.subdatasets[index]?.fields ?? null;
+}
+
+function appendFields(
+  id: string,
+  found: { name: string; className: string; jsonPath: string }[],
+  query?: string | null,
+): void {
+  edit(() => {
+    if (report.value && id === "report" && query !== undefined) {
+      report.value.query = query;
+    }
+    const list = fieldsFor(id);
+    if (!list) {
+      return;
+    }
+    const next = fieldsFromDiscovery(list, found);
+    list.splice(0, list.length, ...next);
+    const current = selection.value;
+    if (id === "report" && current.kind === "field" && current.index >= list.length) {
+      selection.value = { kind: "fields" };
+    }
+    if (
+      id !== "report" &&
+      current.kind === "datasetField" &&
+      String(current.dataset) === id &&
+      current.index >= list.length
+    ) {
+      selection.value = { kind: "dataset", index: current.dataset };
+    }
+  });
+}
+
+function changeField(
+  id: string,
+  index: number,
+  patch: { name?: string; className?: string; jsonPath?: string | null },
+): void {
+  edit(() => {
+    const field = fieldsFor(id)?.[index];
+    if (!field) {
+      return;
+    }
+    if (patch.name !== undefined) {
+      field.name = patch.name;
+    }
+    if (patch.className !== undefined) {
+      field.className = patch.className;
+    }
+    if ("jsonPath" in patch) {
+      field.jsonPath = patch.jsonPath || null;
+    }
+  });
+}
+
+function addField(id: string): void {
+  if (!report.value) {
+    return;
+  }
+  if (id === "report") {
+    addFieldFromProperties();
+    return;
+  }
+  const index = Number(id);
+  edit(() => {
+    const dataset = report.value?.subdatasets[index];
+    if (!dataset) {
+      return;
+    }
+    const fieldIndex = addDatasetField(dataset);
+    selection.value = { kind: "datasetField", dataset: index, index: fieldIndex };
+  });
+}
+
+function removeField(id: string, index: number): void {
+  edit(() => {
+    const list = fieldsFor(id);
+    if (!list || !list[index]) {
+      return;
+    }
+    list.splice(index, 1);
+    if (id === "report") {
+      selection.value = { kind: "fields" };
+      return;
+    }
+    const dataset = Number(id);
+    selection.value = { kind: "dataset", index: dataset };
+  });
+}
+
+const datasetChoices = computed(() => {
+  const current = report.value;
+  if (!current) {
+    return [];
+  }
+  return [
+    {
+      id: "report",
+      name: current.name || "Report",
+      listPath: current.query?.trim() || null,
+      fields: current.fields.map((field) => ({ ...field })),
+    },
+    ...current.subdatasets.map((dataset, index) => ({
+      id: String(index),
+      name: dataset.name || "Dataset",
+      listPath: datasetListPath(current, dataset.name),
+      fields: dataset.fields.map((field) => ({ ...field })),
+    })),
+  ];
+});
+
+watch(datasetChoices, (choices) => emit("datasets", choices), { immediate: true });
+
+function currentReport(): Report | null {
+  if (!report.value) {
+    return null;
+  }
+  return JSON.parse(JSON.stringify(report.value)) as Report;
+}
+
+defineExpose({
+  confirmDiscardIfDirty,
+  discardChanges,
+  isDirty,
+  currentReport,
+  save: () => saveDesign(false),
+  saveAs: () => saveDesign(true),
+  appendFields,
+  changeField,
+  addField,
+  removeField,
+});
 
 watch(
   () => props.templatePath,
-  () => {
+  (next) => {
+    if (next && next === keepOpenPath) {
+      keepOpenPath = "";
+      return;
+    }
     void load();
   },
-  { immediate: true },
+  { immediate: true, flush: "sync" },
+);
+
+watch(
+  () =>
+    (report.value?.bands ?? [])
+      .flatMap((band) => band.elements)
+      .flatMap((element) =>
+        element.type === "image"
+          ? [element.expression]
+          : element.type === "table"
+            ? element.columns.flatMap((column) => column.sections.flatMap((section) => section.elements.filter((child) => child.type === "image").map((child) => child.expression)))
+            : [],
+      )
+      .join("\n") + props.templatePath,
+  () => {
+    void loadImagePreviews();
+  },
 );
 
 watch(
@@ -1538,6 +2011,14 @@ watch(
       void load();
     }
   },
+);
+
+watch(
+  () => props.documentPath,
+  (path) => {
+    void loadJson(path ?? "");
+  },
+  { immediate: true },
 );
 
 watch(editing, async (value) => {
@@ -1583,20 +2064,15 @@ onBeforeUnmount(() => {
 <template>
   <section class="flex h-full min-h-0 flex-col bg-slate-950 text-gray-100">
     <div class="flex shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-900 px-3 py-2">
-      <FwbButton size="xs" color="alternative" @click="emit('create')">New</FwbButton>
-      <FwbButton size="xs" :disabled="!dirty || saving || !report" @click="saveDesign(false)">
-        <span class="inline-flex items-center gap-1.5">
-          <Icon name="save" />
-          {{ saving ? "Saving…" : "Save" }}
-        </span>
-      </FwbButton>
-      <FwbButton size="xs" color="alternative" :disabled="!report || saving" @click="saveDesign(true)">
-        Save As
-      </FwbButton>
       <FwbButton size="xs" color="alternative" :disabled="undoStack.length === 0" @click="undo">
         Undo
       </FwbButton>
+      <FwbButton size="xs" :disabled="!report || saving" @click="saveDesign(false)">Save</FwbButton>
+      <FwbButton size="xs" color="alternative" :disabled="!report || saving" @click="saveDesign(true)">
+        Save As…
+      </FwbButton>
       <span v-if="dirty" class="text-xs font-medium text-amber-400">Unsaved changes</span>
+      <span v-else-if="status" class="text-xs text-gray-400">{{ status }}</span>
       <span v-if="error" class="min-w-0 flex-1 truncate text-xs text-red-400">{{ error }}</span>
       <div class="ml-auto flex items-center gap-1">
         <FwbButtonGroup>
@@ -1815,6 +2291,21 @@ onBeforeUnmount(() => {
               </template>
             </template>
           </template>
+          <label v-if="missingBands.length" class="mt-3 block px-2 text-xs text-gray-500">
+            Add band
+            <select v-model="bandToAdd" :class="inputClass" class="mt-1">
+              <option value="">Choose</option>
+              <option v-for="kind in missingBands" :key="kind" :value="kind">{{ bandLabel(kind) }}</option>
+            </select>
+          </label>
+          <button
+            v-if="bandToAdd"
+            type="button"
+            class="mt-1 flex w-full rounded-md px-2 py-1 text-left text-gray-300 hover:bg-slate-800"
+            @click="addBand"
+          >
+            Add {{ bandLabel(bandToAdd) }}
+          </button>
         </nav>
       </aside>
 
@@ -1849,6 +2340,9 @@ onBeforeUnmount(() => {
         ref="stageEl"
         class="min-w-0 flex-1 overflow-auto bg-slate-900 p-6"
         @scroll="syncRulers"
+        @dragover="onCanvasDragOver"
+        @dragleave="onCanvasDragLeave"
+        @drop="onCanvasDrop"
         @click="tool ? undefined : select({ kind: 'report' })"
       >
         <div :style="{ width: `${canvasWidth * scale}px`, height: `${sheetHeight * scale}px` }">
@@ -1867,9 +2361,6 @@ onBeforeUnmount(() => {
             class="relative flex"
             :data-band-index="row.index"
             @click="tool ? undefined : select({ kind: 'band', index: row.index })"
-            @dragover="onBandDragOver($event, row.index)"
-            @dragleave="onBandDragLeave($event, row.index)"
-            @drop="onBandDrop($event, row.index)"
           >
             <div class="shrink-0 bg-slate-200" :style="{ width: `${leftMargin}px` }" />
             <div
@@ -1882,7 +2373,7 @@ onBeforeUnmount(() => {
                     ? 'bg-white ring-1 ring-inset ring-blue-300'
                     : 'bg-white'
               "
-              :style="{ width: `${columnWidth}px`, height: `${row.band.height}px`, ...gridStyle }"
+              :style="{ width: `${columnWidth}px`, height: `${stripHeight(row.band.height)}px`, ...gridStyle }"
               @click.stop="onBandClick($event, row.index)"
             >
               <div class="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
@@ -1978,7 +2469,17 @@ onBeforeUnmount(() => {
                             @pointerdown.stop
                             @click.stop="selectCell(row.index, index, columnIndex, kind, elementIndex)"
                           >
-                            <div class="h-full w-full overflow-hidden" :style="textFrameStyle()">
+                            <img
+                              v-if="child.type === 'image' && imagePreview(child)"
+                              :src="imagePreview(child)"
+                              alt=""
+                              class="h-full w-full"
+                              :style="imageObjectStyle(child)"
+                            />
+                            <div v-else-if="child.type === 'image'" class="flex h-full items-center justify-center overflow-hidden px-1 text-center text-[9px] text-slate-500">
+                              {{ child.expression || "Image" }}
+                            </div>
+                            <div v-else class="h-full w-full overflow-hidden" :style="textFrameStyle()">
                               <div :style="textRotateStyle(child)">
                                 <span :style="textContentStyle(child)"><template v-for="(piece, pieceIndex) in textPieces(child)" :key="pieceIndex"><span :style="piece.style">{{ piece.text }}</span></template></span>
                               </div>
@@ -2029,8 +2530,27 @@ onBeforeUnmount(() => {
                   </div>
                 </template>
                 <template v-else-if="element.type === 'chart'">
-                  <div class="flex h-full items-center justify-center bg-slate-200 text-xs text-slate-600">
-                    {{ element.kind }}
+                  <div class="flex h-full flex-col items-center justify-center bg-slate-200 px-1 text-center text-xs text-slate-600">
+                    <span>{{ chartKindLabel(element.kind) }}</span>
+                    <span v-if="element.title" class="mt-0.5 text-[10px] text-slate-500">{{ element.title }}</span>
+                  </div>
+                </template>
+                <template v-else-if="element.type === 'subreport'">
+                  <div class="flex h-full flex-col items-center justify-center bg-slate-100 px-1 text-center text-[10px] leading-tight text-slate-600">
+                    <span>Subreport</span>
+                    <span class="mt-0.5 max-w-full truncate text-slate-500">{{ subreportPathText(element.expression) || "No file" }}</span>
+                  </div>
+                </template>
+                <template v-else-if="element.type === 'image'">
+                  <img
+                    v-if="imagePreview(element)"
+                    :src="imagePreview(element)"
+                    alt=""
+                    class="h-full w-full"
+                    :style="imageObjectStyle(element)"
+                  />
+                  <div v-else class="flex h-full items-center justify-center overflow-hidden px-1 text-center text-[10px] leading-tight text-slate-500">
+                    {{ element.expression || "Image" }}
                   </div>
                 </template>
                 <div v-else class="h-full w-full overflow-hidden" :style="textFrameStyle()">
@@ -2113,24 +2633,27 @@ onBeforeUnmount(() => {
           title="Resize palette and properties"
           @pointerdown.stop="onPanelResizeDown($event, 'inspector')"
         />
-        <div class="grid shrink-0 grid-cols-1 gap-1 p-2">
-          <button
+        <div class="grid shrink-0 grid-cols-[repeat(auto-fill,minmax(4.5rem,1fr))] gap-1 p-2">
+          <div
             v-for="item in palette"
             :key="item.id"
-            type="button"
-            class="flex cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm active:cursor-grabbing"
+            role="button"
+            tabindex="0"
+            class="flex cursor-grab flex-col items-center gap-1 rounded-md border px-1 py-2 text-center text-[10px] leading-tight active:cursor-grabbing"
             :class="
               tool === item.id
                 ? 'border-blue-500 bg-blue-600/20 text-white'
                 : 'border-slate-800 bg-slate-900 text-gray-200 hover:bg-slate-800'
             "
+            :title="item.label"
             draggable="true"
             @dragstart="onToolDragStart($event, item.id)"
             @click="tool = tool === item.id ? null : item.id"
+            @keydown.enter.prevent="tool = tool === item.id ? null : item.id"
           >
-            <Icon :name="item.icon" class="text-blue-400" />
+            <Icon :name="item.icon" size="lg" class="text-blue-300" />
             {{ item.label }}
-          </button>
+          </div>
         </div>
         <div class="border-y border-slate-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
           Properties
@@ -2285,6 +2808,7 @@ onBeforeUnmount(() => {
             <p v-if="bandMonitor.floor > 0" class="text-xs text-gray-500">
               Height stays at least {{ Math.round(bandMonitor.floor) }} so the elements still fit.
             </p>
+            <FwbButton size="xs" color="red" @click="removeSelected">Remove band</FwbButton>
           </template>
 
           <template v-else-if="selection.kind === 'tableSection' && selectedTable && selectedTableSection">
@@ -2348,19 +2872,6 @@ onBeforeUnmount(() => {
           </template>
 
           <template v-else-if="editedElement && (selection.kind === 'element' || selection.kind === 'cell')">
-            <template v-if="editedElement.type === 'chart'">
-              <p class="text-xs text-gray-400">
-                <template v-if="plotsChart(editedElement.kind)">
-                  {{ editedElement.kind }} is plotted in Preview.
-                </template>
-                <template v-else>This box marks {{ editedElement.kind }}. Preview keeps the placeholder.</template>
-              </p>
-              <ul v-if="editedElement.series?.length" class="space-y-1 text-xs text-gray-300">
-                <li v-for="(series, index) in editedElement.series" :key="index" class="font-mono">
-                  {{ series.seriesExpression }} · {{ series.categoryExpression }} · {{ series.valueExpression }}
-                </li>
-              </ul>
-            </template>
             <div class="grid grid-cols-2 gap-2">
               <label class="text-xs text-gray-400">
                 X
@@ -2379,6 +2890,239 @@ onBeforeUnmount(() => {
                 <input :class="inputClass" type="number" :value="editedElement.element.height" @change="commitNumber(($event.target as HTMLInputElement).value, (value) => { if (editedElement) { editedElement.element.height = value; clampEdited(editedElement.element); } })" />
               </label>
             </div>
+
+            <template v-if="editedElement.type === 'chart'">
+              <p class="text-xs text-gray-400">
+                <template v-if="plotsChart(editedElement.kind)">Preview plots this chart.</template>
+                <template v-else>Preview keeps the placeholder for {{ editedElement.kind }}.</template>
+              </p>
+              <label class="block text-xs text-gray-400">
+                Kind
+                <select :class="inputClass" :value="editedElement.kind" @change="edit(() => { if (editedElement?.type === 'chart') editedElement.kind = ($event.target as HTMLSelectElement).value; })">
+                  <option v-if="!plotsChart(editedElement.kind)" :value="editedElement.kind">{{ editedElement.kind }}</option>
+                  <option v-for="kind in CHART_KINDS" :key="kind.id" :value="kind.id">{{ kind.label }}</option>
+                </select>
+              </label>
+              <label class="block text-xs text-gray-400">
+                Title
+                <input :class="inputClass" :value="editedElement.title ?? ''" placeholder="Chart title" @change="edit(() => { if (editedElement?.type === 'chart') editedElement.title = chartExpression(($event.target as HTMLInputElement).value) || null; })" />
+              </label>
+              <label class="block text-xs text-gray-400">
+                Subtitle
+                <input :class="inputClass" :value="editedElement.subtitle ?? ''" @change="edit(() => { if (editedElement?.type === 'chart') editedElement.subtitle = chartExpression(($event.target as HTMLInputElement).value) || null; })" />
+              </label>
+              <label class="flex items-center gap-2 text-xs text-gray-300">
+                <input
+                  type="checkbox"
+                  :checked="editedElement.showLegend !== false"
+                  @change="edit(() => { if (editedElement?.type === 'chart') editedElement.showLegend = ($event.target as HTMLInputElement).checked; })"
+                />
+                Show legend
+              </label>
+              <label class="block text-xs text-gray-400">
+                Evaluation
+                <select :class="inputClass" :value="editedElement.evaluationTime ?? ''" @change="edit(() => { if (editedElement?.type === 'chart') editedElement.evaluationTime = ($event.target as HTMLSelectElement).value || null; })">
+                  <option value="">Now</option>
+                  <option value="Now">Now</option>
+                  <option value="Report">Report</option>
+                  <option value="Page">Page</option>
+                  <option value="Column">Column</option>
+                  <option value="Band">Band</option>
+                </select>
+              </label>
+              <label class="block text-xs text-gray-400">
+                Data array
+                <input
+                  :class="inputClass"
+                  :value="editedElement.dataSource ?? ''"
+                  placeholder="chartPoints"
+                  @change="edit(() => { if (report && editedElement?.type === 'chart') bindChartSource(report, editedElement, ($event.target as HTMLInputElement).value); })"
+                />
+              </label>
+              <p class="text-xs text-gray-500">Each object in that JSON array is one point. Leave it empty to read the main record once.</p>
+              <div v-for="(series, index) in editedElement.series ?? []" :key="index" class="space-y-2 rounded-md border border-slate-800 p-2">
+                <div class="flex items-center justify-between text-xs text-gray-400">
+                  Series {{ index + 1 }}
+                  <button type="button" class="text-red-400 hover:text-red-300" @click="edit(() => { if (editedElement?.type === 'chart') editedElement.series?.splice(index, 1); })">Remove</button>
+                </div>
+                <label class="block text-xs text-gray-400">
+                  Name
+                  <input :class="inputClass" :value="series.seriesExpression" @change="edit(() => { if (editedElement?.type === 'chart') setChartExpression(editedElement, series, 'seriesExpression', ($event.target as HTMLInputElement).value); })" />
+                </label>
+                <label class="block text-xs text-gray-400">
+                  Category
+                  <input :class="inputClass" :value="series.categoryExpression" @change="edit(() => { if (editedElement?.type === 'chart') setChartExpression(editedElement, series, 'categoryExpression', ($event.target as HTMLInputElement).value); })" />
+                </label>
+                <label class="block text-xs text-gray-400">
+                  Use
+                  <select :class="inputClass" @change="edit(() => { const value = ($event.target as HTMLSelectElement).value; if (value && report && editedElement?.type === 'chart') setChartExpression(editedElement, series, 'categoryExpression', value); })">
+                    <option value="">Choose</option>
+                    <option v-for="choice in chartChoices(report, editedElement, series.categoryExpression)" :key="choice" :value="choice">{{ choice }}</option>
+                  </select>
+                </label>
+                <label class="block text-xs text-gray-400">
+                  Value
+                  <input :class="inputClass" :value="series.valueExpression" @change="edit(() => { if (editedElement?.type === 'chart') setChartExpression(editedElement, series, 'valueExpression', ($event.target as HTMLInputElement).value); })" />
+                </label>
+                <label class="block text-xs text-gray-400">
+                  Use
+                  <select :class="inputClass" @change="edit(() => { const value = ($event.target as HTMLSelectElement).value; if (value && report && editedElement?.type === 'chart') setChartExpression(editedElement, series, 'valueExpression', value); })">
+                    <option value="">Choose</option>
+                    <option v-for="choice in chartChoices(report, editedElement, series.valueExpression)" :key="choice" :value="choice">{{ choice }}</option>
+                  </select>
+                </label>
+              </div>
+              <FwbButton size="xs" @click="edit(() => { if (editedElement?.type === 'chart') addChartSeries(editedElement); })">Add series</FwbButton>
+            </template>
+
+            <template v-if="editedElement.type === 'subreport'">
+              <label class="block text-xs text-gray-400">
+                Report file
+                <input
+                  :class="inputClass"
+                  :value="editedElement.expression"
+                  placeholder='"section.jrxml"'
+                  @change="edit(() => { if (editedElement?.type === 'subreport') editedElement.expression = chartExpression(($event.target as HTMLInputElement).value); })"
+                />
+              </label>
+              <div class="flex flex-wrap gap-2">
+                <FwbButton size="xs" @click="browseSubreport">Browse</FwbButton>
+                <FwbButton size="xs" @click="createSubreport">New</FwbButton>
+                <FwbButton size="xs" :disabled="!editedElement.expression" @click="openSubreport(editedElement.expression)">Open</FwbButton>
+              </div>
+              <label class="block text-xs text-gray-400">
+                Data path
+                <input
+                  :class="inputClass"
+                  :value="editedElement.dataSource ?? ''"
+                  placeholder="orders"
+                  @change="setSubreportSource(($event.target as HTMLInputElement).value)"
+                />
+              </label>
+              <p class="text-xs text-gray-500">
+                Leave the path empty to fill the other file once from the current JSON object. A path such as customer.orders repeats its detail band, one object per element.
+              </p>
+              <FwbButton size="xs" color="alternative" @click="setSubreportSource('')">Use this object</FwbButton>
+              <div class="space-y-2 rounded-md border border-slate-800 p-2">
+                <p class="text-xs text-gray-400">JSON file</p>
+                <p v-if="jsonError" class="text-xs text-amber-400">{{ jsonError }}</p>
+                <p v-else-if="jsonDocument === null" class="text-xs text-gray-500">
+                  Choose a JSON file in Dataset.
+                  <button type="button" class="text-blue-400 hover:text-blue-300" @click="emit('openDataset')">
+                    Open Dataset
+                  </button>
+                </p>
+                <JsonTree
+                  v-else
+                  :value="jsonDocument"
+                  :selected="editedElement.dataSource ?? ''"
+                  @select="setSubreportSource"
+                />
+              </div>
+            </template>
+
+            <template v-if="editedElement.type === 'image'">
+              <label class="block text-xs text-gray-400">
+                Image expression
+                <input
+                  :class="inputClass"
+                  :value="editedElement.expression"
+                  placeholder='"logo.png" or $F{logo}'
+                  @change="edit(() => { if (editedElement?.type === 'image') editedElement.expression = commitImageExpression(($event.target as HTMLInputElement).value); })"
+                />
+              </label>
+              <label class="block text-xs text-gray-400">
+                Expression class
+                <input
+                  :class="inputClass"
+                  :value="editedElement.expressionClass ?? ''"
+                  placeholder="java.lang.String"
+                  @change="edit(() => { if (editedElement?.type === 'image') editedElement.expressionClass = ($event.target as HTMLInputElement).value.trim() || null; })"
+                />
+              </label>
+              <label class="block text-xs text-gray-400">
+                Scale
+                <select :class="inputClass" :value="editedElement.scaleImage ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.scaleImage = (($event.target as HTMLSelectElement).value || null) as typeof editedElement.scaleImage; })">
+                  <option value="">Retain shape</option>
+                  <option value="clip">Clip</option>
+                  <option value="fillFrame">Fill frame</option>
+                  <option value="retainShape">Retain shape</option>
+                  <option value="realHeight">Real height</option>
+                  <option value="realSize">Real size</option>
+                </select>
+              </label>
+              <div class="grid grid-cols-2 gap-2">
+                <label class="text-xs text-gray-400">
+                  Horizontal
+                  <select :class="inputClass" :value="editedElement.hAlign ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.hAlign = (($event.target as HTMLSelectElement).value || null) as typeof editedElement.hAlign; })">
+                    <option value="">Left</option>
+                    <option value="left">Left</option>
+                    <option value="center">Center</option>
+                    <option value="right">Right</option>
+                  </select>
+                </label>
+                <label class="text-xs text-gray-400">
+                  Vertical
+                  <select :class="inputClass" :value="editedElement.vAlign ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.vAlign = (($event.target as HTMLSelectElement).value || null) as typeof editedElement.vAlign; })">
+                    <option value="">Top</option>
+                    <option value="top">Top</option>
+                    <option value="middle">Middle</option>
+                    <option value="bottom">Bottom</option>
+                  </select>
+                </label>
+              </div>
+              <label class="block text-xs text-gray-400">
+                On error
+                <select :class="inputClass" :value="editedElement.onErrorType ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.onErrorType = (($event.target as HTMLSelectElement).value || null) as typeof editedElement.onErrorType; })">
+                  <option value="">Error</option>
+                  <option value="error">Error</option>
+                  <option value="blank">Blank</option>
+                  <option value="icon">Icon</option>
+                </select>
+              </label>
+              <label class="block text-xs text-gray-400">
+                Evaluation
+                <select :class="inputClass" :value="editedElement.evaluationTime ?? ''" @change="edit(() => { if (editedElement?.type === 'image') { editedElement.evaluationTime = ($event.target as HTMLSelectElement).value || null; if (editedElement.evaluationTime !== 'Group') editedElement.evaluationGroup = null; } })">
+                  <option value="">Now</option>
+                  <option value="Now">Now</option>
+                  <option value="Report">Report</option>
+                  <option value="Page">Page</option>
+                  <option value="Column">Column</option>
+                  <option value="Group">Group</option>
+                  <option value="Band">Band</option>
+                  <option value="Auto">Auto</option>
+                </select>
+              </label>
+              <label v-if="editedElement.evaluationTime === 'Group'" class="block text-xs text-gray-400">
+                Evaluation group
+                <input :class="inputClass" :value="editedElement.evaluationGroup ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.evaluationGroup = ($event.target as HTMLInputElement).value || null; })" />
+              </label>
+              <label class="flex items-center gap-2 text-xs text-gray-300">
+                <input
+                  type="checkbox"
+                  :checked="!!editedElement.lazy"
+                  @change="edit(() => { if (editedElement?.type === 'image') editedElement.lazy = ($event.target as HTMLInputElement).checked; })"
+                />
+                Lazy
+              </label>
+              <label class="block text-xs text-gray-400">
+                Cache
+                <select :class="inputClass" :value="editedElement.usingCache === true ? 'true' : editedElement.usingCache === false ? 'false' : ''" @change="edit(() => { if (editedElement?.type === 'image') { const value = ($event.target as HTMLSelectElement).value; editedElement.usingCache = value === '' ? null : value === 'true'; } })">
+                  <option value="">Automatic</option>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </label>
+              <label class="block text-xs text-gray-400">
+                Rotation
+                <select :class="inputClass" :value="editedElement.rotation ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.rotation = (($event.target as HTMLSelectElement).value || null) as typeof editedElement.rotation; })">
+                  <option value="">None</option>
+                  <option value="left">Left</option>
+                  <option value="right">Right</option>
+                  <option value="upsideDown">Upside down</option>
+                </select>
+              </label>
+            </template>
 
             <template v-if="editedElement.type === 'staticText' || editedElement.type === 'textField'">
               <label v-if="editedElement.type === 'staticText'" class="block text-xs text-gray-400">
@@ -2539,11 +3283,8 @@ onBeforeUnmount(() => {
               Add column
             </FwbButton>
 
-            <FwbButton v-if="editedElement.type !== 'chart'" size="xs" color="red" @click="removeSelected">
+            <FwbButton size="xs" color="red" @click="removeSelected">
               Delete
-            </FwbButton>
-            <FwbButton v-else size="xs" color="alternative" @click="removeSelected">
-              Remove placeholder
             </FwbButton>
           </template>
         </div>

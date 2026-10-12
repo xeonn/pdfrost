@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- One record is one object in orders. The table reads that object's lines array. -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:jr="http://jasperreports.sourceforge.net/jasperreports/components" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="OrderLines" pageWidth="555" pageHeight="842" columnWidth="555" leftMargin="0" rightMargin="0" topMargin="0" bottomMargin="0">
+	<subDataset name="Lines">
+		<field name="sku" class="java.lang.String"/>
+		<field name="qty" class="java.lang.Integer"/>
+	</subDataset>
+	<field name="orderNo" class="java.lang.String"/>
+	<detail>
+		<band height="80" splitType="Stretch">
+			<staticText>
+				<reportElement x="0" y="4" width="50" height="16"/>
+				<textElement>
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Order]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="56" y="4" width="120" height="16"/>
+				<textFieldExpression><![CDATA[$F{orderNo}]]></textFieldExpression>
+			</textField>
+			<componentElement>
+				<reportElement x="0" y="26" width="280" height="40"/>
+				<jr:table>
+					<datasetRun subDataset="Lines">
+						<dataSourceExpression><![CDATA[subDataSource("lines")]]></dataSourceExpression>
+					</datasetRun>
+					<jr:column width="180">
+						<jr:columnHeader height="18">
+							<staticText>
+								<reportElement x="0" y="0" width="180" height="18"/>
+								<textElement>
+									<font isBold="true"/>
+								</textElement>
+								<text><![CDATA[SKU]]></text>
+							</staticText>
+						</jr:columnHeader>
+						<jr:detailCell height="16">
+							<textField>
+								<reportElement x="0" y="0" width="180" height="16"/>
+								<textFieldExpression><![CDATA[$F{sku}]]></textFieldExpression>
+							</textField>
+						</jr:detailCell>
+					</jr:column>
+					<jr:column width="100">
+						<jr:columnHeader height="18">
+							<staticText>
+								<reportElement x="0" y="0" width="100" height="18"/>
+								<textElement>
+									<font isBold="true"/>
+								</textElement>
+								<text><![CDATA[Qty]]></text>
+							</staticText>
+						</jr:columnHeader>
+						<jr:detailCell height="16">
+							<textField>
+								<reportElement x="0" y="0" width="100" height="16"/>
+								<textFieldExpression><![CDATA[$F{qty}]]></textFieldExpression>
+							</textField>
+						</jr:detailCell>
+					</jr:column>
+				</jr:table>
+			</componentElement>
+		</band>
+	</detail>
+</jasperReport>

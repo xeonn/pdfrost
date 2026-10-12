@@ -38,6 +38,7 @@ fn a_small_report_round_trips_through_the_writer() {
             description: None,
             json_path: Some("docno".to_string()),
         }],
+        query: None,
         subdatasets: vec![SubDataset {
             name: "Items".to_string(),
             fields: vec![Field {
@@ -188,4 +189,36 @@ fn a_small_report_round_trips_through_the_writer() {
     assert_eq!(table.columns[0].sections[0].height, 30.0);
     assert_eq!(table.columns[0].sections[2].height, 30.0);
     assert!(table.columns[0].sections[2].elements.is_empty());
+}
+
+#[test]
+fn a_root_field_path_is_written_relative_to_the_query() {
+    let mut report = pdfrost_engine::Report {
+        name: "Customers".to_string(),
+        page_width: 200.0,
+        page_height: 200.0,
+        column_width: 160.0,
+        left_margin: 20.0,
+        right_margin: 20.0,
+        top_margin: 20.0,
+        bottom_margin: 20.0,
+        styles: Vec::new(),
+        fields: vec![Field {
+            name: "Address".to_string(),
+            class_name: "java.lang.String".to_string(),
+            description: Some("Address".to_string()),
+            json_path: Some("(root).Northwind.Customers.Address".to_string()),
+        }],
+        query: Some("Northwind.Customers".to_string()),
+        subdatasets: Vec::new(),
+        bands: Vec::new(),
+        warnings: Vec::new(),
+    };
+    let xml = write_report(&report);
+    assert!(xml.contains("value=\"Address\""));
+    assert!(!xml.contains("(root)"));
+    report.fields[0].json_path = Some("Address".to_string());
+    let parsed = pdfrost_engine::parse(&xml).unwrap();
+    assert_eq!(parsed.fields, report.fields);
+    assert_eq!(parsed.query.as_deref(), Some("Northwind.Customers"));
 }

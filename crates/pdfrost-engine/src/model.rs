@@ -16,6 +16,9 @@ pub struct Report {
     pub bottom_margin: f32,
     pub styles: Vec<Style>,
     pub fields: Vec<Field>,
+    /// JSON query path for the main record set. Empty means the document itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
     /// Subdataset fields stay here. They are not copied onto [`Report::fields`].
     pub subdatasets: Vec<SubDataset>,
     /// Bands in document order.
@@ -345,6 +348,66 @@ pub struct Graphic {
     pub element: ReportElement,
 }
 
+/// `scaleImage` on `<image>`. Absent means `RetainShape`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ScaleImage {
+    Clip,
+    FillFrame,
+    RetainShape,
+    RealHeight,
+    RealSize,
+}
+
+/// `hAlign` on `<image>`. Absent means `Left`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HorizontalImageAlign {
+    Left,
+    Center,
+    Right,
+}
+
+/// `onErrorType` on `<image>`. Absent means `Error`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OnErrorType {
+    Error,
+    Blank,
+    Icon,
+}
+
+/// An `<image>`. The picture is the value of `imageExpression`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Image {
+    pub element: ReportElement,
+    /// Raw `imageExpression` text, including the quotes of a string literal.
+    #[serde(default)]
+    pub expression: String,
+    /// `imageExpression class` when it is not `java.lang.String`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expression_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale_image: Option<ScaleImage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub h_align: Option<HorizontalImageAlign>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub v_align: Option<VerticalAlignment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<Rotation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub using_cache: Option<bool>,
+    #[serde(default)]
+    pub lazy: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_error_type: Option<OnErrorType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluation_time: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluation_group: Option<String>,
+}
+
 /// A `<break>`. `column` is `type="Column"`. Page and column breaks both start a new page.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -398,6 +461,19 @@ pub struct Chart {
     pub series: Vec<CategorySeries>,
 }
 
+/// Another `.jrxml` filled into this box.
+///
+/// `expression` is the raw `subreportExpression`. `data_source` is the path
+/// inside `subDataSource("…")`. `None` fills the current JSON object once.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Subreport {
+    pub element: ReportElement,
+    pub expression: String,
+    #[serde(default)]
+    pub data_source: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Table {
@@ -442,8 +518,10 @@ pub enum Element {
     Line(Graphic),
     Rectangle(Graphic),
     Ellipse(Graphic),
+    Image(Image),
     Break(PageBreak),
     Chart(Chart),
+    Subreport(Subreport),
     Table(Table),
 }
 
@@ -455,8 +533,10 @@ impl Element {
             Element::Line(graphic) | Element::Rectangle(graphic) | Element::Ellipse(graphic) => {
                 &graphic.element
             }
+            Element::Image(image) => &image.element,
             Element::Break(page_break) => &page_break.element,
             Element::Chart(chart) => &chart.element,
+            Element::Subreport(subreport) => &subreport.element,
             Element::Table(table) => &table.element,
         }
     }

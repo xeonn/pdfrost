@@ -116,6 +116,21 @@ export type Element =
   | { type: "line"; element: ReportElement }
   | { type: "rectangle"; element: ReportElement }
   | { type: "ellipse"; element: ReportElement }
+  | {
+      type: "image";
+      element: ReportElement;
+      expression: string;
+      expressionClass?: string | null;
+      scaleImage?: "clip" | "fillFrame" | "retainShape" | "realHeight" | "realSize" | null;
+      hAlign?: "left" | "center" | "right" | null;
+      vAlign?: "top" | "middle" | "bottom" | null;
+      rotation?: "left" | "right" | "upsideDown" | null;
+      usingCache?: boolean | null;
+      lazy?: boolean;
+      onErrorType?: "error" | "blank" | "icon" | null;
+      evaluationTime?: string | null;
+      evaluationGroup?: string | null;
+    }
   | { type: "break"; element: ReportElement; column: boolean }
   | {
       type: "chart";
@@ -128,6 +143,12 @@ export type Element =
       dataSource?: string | null;
       subDataset?: string | null;
       series?: CategorySeries[];
+    }
+  | {
+      type: "subreport";
+      element: ReportElement;
+      expression: string;
+      dataSource?: string | null;
     }
   | {
       type: "table";
@@ -173,19 +194,34 @@ export type Report = {
   bottomMargin: number;
   styles: Style[];
   fields: Field[];
+  /** JSON path of the main record set. Null means the file root. */
+  query: string | null;
   subdatasets: SubDataset[];
   bands: Band[];
   warnings: Warning[];
 };
 
+/** JRXML element order. A new band is inserted here. */
 export const BAND_ORDER: BandKind[] = [
+  "background",
   "title",
   "pageHeader",
   "columnHeader",
   "detail",
-  "summary",
   "columnFooter",
   "pageFooter",
+  "summary",
+];
+
+/** Design canvas, top to bottom. Background is last, as in Jaspersoft Studio. */
+export const BAND_CANVAS: BandKind[] = [
+  "title",
+  "pageHeader",
+  "columnHeader",
+  "detail",
+  "columnFooter",
+  "pageFooter",
+  "summary",
   "background",
 ];
 
@@ -200,7 +236,15 @@ export const BAND_LABEL: Record<BandKind, string> = {
   background: "Background",
 };
 
-export type Tool = "staticText" | "textField" | "line" | "rectangle" | "table";
+export type Tool = "staticText" | "textField" | "image" | "line" | "rectangle" | "table" | "chart" | "subreport";
+
+export const CHART_KINDS: { id: string; label: string }[] = [
+  { id: "barChart", label: "Bar" },
+  { id: "stackedBarChart", label: "Stacked bar" },
+  { id: "lineChart", label: "Line" },
+  { id: "areaChart", label: "Area" },
+  { id: "stackedAreaChart", label: "Stacked area" },
+];
 
 export type Handle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
@@ -219,6 +263,7 @@ export function blankReport(): Report {
     bottomMargin: 20,
     styles: [],
     fields: [],
+    query: null,
     subdatasets: [],
     bands: [emptyBand("title", 79), emptyBand("detail", 125), emptyBand("pageFooter", 54)],
     warnings: [],
@@ -260,10 +305,14 @@ export function elementLabel(element: Element): string {
       return "Rectangle";
     case "ellipse":
       return "Ellipse";
+    case "image":
+      return element.expression.replace(/^"|"$/g, "") || "Image";
     case "break":
       return "Break";
     case "chart":
       return element.kind || "Chart";
+    case "subreport":
+      return element.expression.replace(/^"|"$/g, "") || "Subreport";
     case "table":
       return "Table";
   }
@@ -363,6 +412,57 @@ export function applyResize(
 
 export function fieldExpression(name: string): string {
   return `$F{${name}}`;
+}
+
+export function chartExpression(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.startsWith("$") || trimmed.startsWith('"') || /^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+    return trimmed;
+  }
+  return `"${trimmed.replace(/"/g, '\\"')}"`;
+}
+
+export function chartChoices(
+  report: Report,
+  chart: Extract<Element, { type: "chart" }>,
+  current: string,
+): string[] {
+  const dataset = chart.subDataset
+    ? report.subdatasets.find((item) => item.name === chart.subDataset)
+    : null;
+  return expressionChoices(dataset ? dataset.fields : report.fields, current, false);
+}
+
+export function bindChartSource(report: Report, chart: Extract<Element, { type: "chart" }>, source: string): void {
+  const name = source.trim();
+  if (!name) {
+    chart.dataSource = null;
+    chart.subDataset = null;
+    return;
+  }
+  chart.dataSource = name;
+  chart.subDataset = ensureDataset(report, name).name;
+  rememberChartFields(report, chart);
+}
+
+export function rememberChartFields(report: Report, chart: Extract<Element, { type: "chart" }>): void {
+  const datasetName = chart.subDataset;
+  if (!datasetName) {
+    return;
+  }
+  const dataset = ensureDataset(report, datasetName);
+  for (const series of chart.series ?? []) {
+    for (const expression of [series.seriesExpression, series.categoryExpression, series.valueExpression]) {
+      const name = fieldName(expression);
+      if (name && !dataset.fields.some((field) => field.name === name)) {
+        dataset.fields.push(makeField(name));
+      }
+    }
+  }
+}
+
+function fieldName(expression: string): string | null {
+  return /^\$F\{([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(expression.trim())?.[1] ?? null;
 }
 
 export function expressionChoices(fields: Field[], current: string, includeBuiltins: boolean): string[] {
@@ -506,6 +606,92 @@ export function removeColumn(table: Extract<Element, { type: "table" }>, index: 
   syncTableBox(table);
 }
 
+export function datasetListPath(report: Report, datasetName: string): string | null {
+  for (const band of report.bands) {
+    for (const element of band.elements) {
+      if (element.type !== "table" && element.type !== "chart") {
+        continue;
+      }
+      if (element.subDataset === datasetName && element.dataSource) {
+        return element.dataSource;
+      }
+    }
+  }
+  return null;
+}
+
+/** Read Fields adds names that are not already present. A repeated name keeps its class. A `(root)` path becomes the expression relative to the query. */
+export function fieldsFromDiscovery(
+  previous: Field[],
+  found: { name: string; className: string; jsonPath: string }[],
+): Field[] {
+  const kept: Field[] = [];
+  const names = new Set<string>();
+  for (const field of previous) {
+    if (names.has(field.name)) {
+      continue;
+    }
+    names.add(field.name);
+    kept.push(field);
+  }
+  for (const item of found) {
+    if (!item.name) {
+      continue;
+    }
+    const existing = kept.find((field) => field.name === item.name);
+    if (existing) {
+      if (existing.jsonPath?.startsWith("(root)")) {
+        existing.jsonPath = item.jsonPath;
+      }
+      continue;
+    }
+    names.add(item.name);
+    kept.push({
+      name: item.name,
+      className: item.className,
+      description: item.name,
+      jsonPath: item.jsonPath,
+    });
+  }
+  return kept;
+}
+
+/** Studio stores the field expression relative to the query, as in `Address` beside `Northwind.Customers`. */
+export function relativeExpression(jsonPath: string | null, recordPath: string | null): string | null {
+  if (!jsonPath) {
+    return jsonPath;
+  }
+  let rest = jsonPath.trim();
+  if (rest.startsWith("(root)")) {
+    rest = rest.slice("(root)".length).replace(/^\./, "");
+  }
+  const record = (recordPath ?? "").trim();
+  if (record && record !== ".") {
+    const compact = record
+      .split(".")
+      .map((part) => part.trim())
+      .filter((part) => part && !/^\d+$/.test(part))
+      .join(".");
+    const prefix = `${compact}.`;
+    if (compact && rest.startsWith(prefix)) {
+      return rest.slice(prefix.length);
+    }
+  }
+  return rest || null;
+}
+
+export function applyStudioExpressions(report: Report): void {
+  for (const field of report.fields) {
+    field.jsonPath = relativeExpression(field.jsonPath, report.query);
+  }
+  for (const dataset of report.subdatasets) {
+    const list = datasetListPath(report, dataset.name);
+    for (const field of dataset.fields) {
+      field.jsonPath = relativeExpression(field.jsonPath, list);
+    }
+  }
+}
+
 export function addMainField(report: Report): number {
   const name = uniqueName(
     report.fields.map((field) => field.name),
@@ -584,6 +770,22 @@ export function setBorderColor(element: ReportElement, color: Color): void {
   ensurePen(element).lineColor = color;
 }
 
+export function ensureBand(report: Report, kind: BandKind): number {
+  const existing = report.bands.findIndex((band) => band.kind === kind);
+  if (existing >= 0) {
+    return existing;
+  }
+  const band = emptyBand(kind, 0);
+  const order = BAND_ORDER.indexOf(kind);
+  const insertAt = report.bands.findIndex((item) => BAND_ORDER.indexOf(item.kind) > order);
+  if (insertAt < 0) {
+    report.bands.push(band);
+    return report.bands.length - 1;
+  }
+  report.bands.splice(insertAt, 0, band);
+  return insertAt;
+}
+
 function emptyBand(kind: BandKind, height: number): Band {
   return { kind, height, splitType: "stretch", elements: [] };
 }
@@ -657,6 +859,26 @@ function createElement(report: Report, tool: Tool, x: number, y: number): Elemen
       return { type: "line", element: frame(x, y, 80, 1) };
     case "rectangle":
       return { type: "rectangle", element: frame(x, y, 40, 20) };
+    case "image":
+      return { type: "image", element: frame(x, y, 50, 50), expression: "" };
+    case "chart":
+      return {
+        type: "chart",
+        element: frame(x, y, 200, 200),
+        kind: "barChart",
+        evaluationTime: "Report",
+        showLegend: true,
+        series: [
+          { seriesExpression: '"SERIES 1"', categoryExpression: "0", valueExpression: "0" },
+        ],
+      };
+    case "subreport":
+      return {
+        type: "subreport",
+        element: frame(x, y, Math.max(40, report.columnWidth || 200), 40),
+        expression: "",
+        dataSource: null,
+      };
     case "table":
       return newTable(report, x, y);
   }

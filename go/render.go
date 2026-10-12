@@ -19,9 +19,11 @@ type Result struct {
 	Warnings []Warning
 }
 
-// Render fills templateXML with one JSON object and returns PDF bytes.
+// Render fills templateXML with document and returns PDF bytes.
 // renderedAt is the instant printed for new java.util.Date(), in UTC.
-// document must be a JSON object. The engine does not run the template query.
+// document is one JSON value. An object is one record. An array is one record
+// per element, held in memory for the call. A JSON queryString in the template
+// selects the main records when that path exists.
 func Render(templateXML string, document []byte, renderedAt time.Time) (*Result, error) {
 	if !json.Valid(document) {
 		return nil, errInvalidJSON

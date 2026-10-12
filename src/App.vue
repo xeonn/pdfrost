@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
@@ -11,6 +11,7 @@ import {
   FwbSpinner,
 } from "flowbite-vue";
 import ConsolePanel from "./Console.vue";
+import DataView from "./DataView.vue";
 import Designer from "./Designer.vue";
 import Icon from "./Icon.vue";
 import Source from "./Source.vue";
@@ -18,8 +19,9 @@ import { type ConsoleIssue, lineFromMessage } from "./console";
 import { FitMode, PdfStage } from "./pdf";
 import { blankReport } from "./report";
 import type { Rendered } from "./types";
+import { version as appVersion } from "../package.json";
 
-type Mode = "design" | "source" | "preview";
+type Mode = "design" | "source" | "data" | "preview";
 
 const mode = ref<Mode>("preview");
 const modes: { id: Mode; label: string }[] = [
@@ -29,6 +31,7 @@ const modes: { id: Mode; label: string }[] = [
 ];
 const templatePath = ref("");
 const documentPath = ref("");
+const draftEditor = ref<"design" | "source">("design");
 const error = ref("");
 const loading = ref(false);
 const hasDocument = ref(false);
@@ -39,12 +42,33 @@ const sourceRef = ref<{
   isDirty: () => boolean;
   discardChanges: () => Promise<void>;
   reloadFromDisk: () => Promise<void>;
+  contents: () => string;
+  isHandEdited: () => boolean;
+  hasDesignPreview: () => boolean;
+  showReport: (text: string) => void;
+  save: () => Promise<void>;
+  saveAs: () => Promise<void>;
 } | null>(null);
 const designRef = ref<{
   confirmDiscardIfDirty: (message?: string) => boolean;
   discardChanges: () => void;
   isDirty: () => boolean;
+  currentReport: () => unknown;
+  save: () => Promise<void>;
+  saveAs: () => Promise<void>;
+  appendFields: (id: string, fields: { name: string; className: string; jsonPath: string }[], query?: string | null) => void;
+  changeField: (
+    id: string,
+    index: number,
+    patch: { name?: string; className?: string; jsonPath?: string | null },
+  ) => void;
+  addField: (id: string) => void;
+  removeField: (id: string, index: number) => void;
 } | null>(null);
+const fileMenuOpen = ref(false);
+const fileCanSave = ref(false);
+const fileMenuEl = ref<HTMLElement | null>(null);
+const datasets = ref<{ id: string; name: string; listPath: string | null; fields: { name: string; className: string; description: string | null; jsonPath: string | null }[] }[]>([]);
 let renderGeneration = 0;
 
 const stage = new PdfStage();
@@ -96,11 +120,34 @@ async function chooseTemplate(): Promise<void> {
   }
   templatePath.value = picked;
   documentPath.value = "";
-  mode.value = "preview";
-  await render();
+  mode.value = "design";
+  clearPreview();
 }
 
-async function chooseDocument(): Promise<void> {
+async function openTemplate(path: string): Promise<void> {
+  if (!path || path === templatePath.value) {
+    return;
+  }
+  if (
+    sourceRef.value &&
+    !sourceRef.value.confirmDiscardIfDirty("Discard unsaved Source changes and open the subreport?")
+  ) {
+    return;
+  }
+  if (
+    designRef.value &&
+    !designRef.value.confirmDiscardIfDirty("Discard unsaved Design changes and open the subreport?")
+  ) {
+    return;
+  }
+  templatePath.value = path;
+  mode.value = "design";
+  if (documentPath.value) {
+    await render();
+  }
+}
+
+async function chooseDocument(stayOnDesign?: boolean): Promise<void> {
   if (!templatePath.value) {
     return;
   }
@@ -109,7 +156,9 @@ async function chooseDocument(): Promise<void> {
     return;
   }
   documentPath.value = picked;
-  mode.value = "preview";
+  if (stayOnDesign !== true) {
+    mode.value = "data";
+  }
   await render();
 }
 
@@ -149,6 +198,46 @@ function setConsoleFromRender(warnings: Rendered["warnings"], renderError?: stri
   consoleIssues.value = issues;
 }
 
+function directoryOf(file: string): string {
+  const index = Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\"));
+  return index >= 0 ? file.slice(0, index) : "";
+}
+
+function editorForSave(): "design" | "source" {
+  if (mode.value === "source") {
+    return "source";
+  }
+  if (mode.value === "design" || mode.value === "data") {
+    return "design";
+  }
+  return draftEditor.value;
+}
+
+function editorForRender(): "design" | "source" {
+  if (mode.value === "source") {
+    return "source";
+  }
+  if (mode.value === "design" || mode.value === "data") {
+    return "design";
+  }
+  return draftEditor.value;
+}
+
+async function templateXml(): Promise<string> {
+  if (editorForRender() === "source") {
+    const xml = sourceRef.value?.contents()?.trim() ?? "";
+    if (xml) {
+      return xml;
+    }
+  } else {
+    const report = designRef.value?.currentReport();
+    if (report) {
+      return await invoke<string>("report_xml", { report });
+    }
+  }
+  return await invoke<string>("read_template", { path: templatePath.value });
+}
+
 async function render(): Promise<void> {
   if (!templatePath.value) {
     return;
@@ -157,8 +246,13 @@ async function render(): Promise<void> {
   loading.value = true;
   error.value = "";
   try {
-    const rendered = await invoke<Rendered>("render_report", {
-      templatePath: templatePath.value,
+    const template = await templateXml();
+    if (generation !== renderGeneration) {
+      return;
+    }
+    const rendered = await invoke<Rendered>("render_template", {
+      template,
+      assetDir: directoryOf(templatePath.value) || null,
       documentPath: documentPath.value || null,
     });
     if (generation !== renderGeneration) {
@@ -193,27 +287,60 @@ async function render(): Promise<void> {
   }
 }
 
+async function showDesignInSource(): Promise<boolean> {
+  if (!sourceRef.value) {
+    return true;
+  }
+  if (designRef.value?.isDirty()) {
+    const report = designRef.value.currentReport();
+    if (!report) {
+      return true;
+    }
+    if (
+      sourceRef.value.isHandEdited() &&
+      !window.confirm("Replace Source with the report from Design?")
+    ) {
+      return false;
+    }
+    try {
+      const xml = await invoke<string>("report_xml", { report });
+      sourceRef.value.showReport(xml);
+    } catch (err) {
+      error.value = message(err);
+      return false;
+    }
+    return true;
+  }
+  if (sourceRef.value.hasDesignPreview() && !sourceRef.value.isHandEdited()) {
+    await sourceRef.value.reloadFromDisk();
+  }
+  return true;
+}
+
 async function selectMode(next: Mode): Promise<void> {
   if (next === mode.value) {
     return;
   }
-  if (mode.value === "source" && next !== "source" && sourceRef.value) {
+  if (mode.value === "design" || mode.value === "source") {
+    draftEditor.value = mode.value;
+  }
+  if (mode.value === "data") {
+    draftEditor.value = "design";
+  }
+  const editing = mode.value === "preview" ? draftEditor.value : mode.value;
+  if (next !== "preview" && editing === "source" && next !== "source" && sourceRef.value?.isHandEdited()) {
     if (!sourceRef.value.confirmDiscardIfDirty("Discard unsaved Source changes?")) {
       return;
     }
-    if (sourceRef.value.isDirty()) {
-      await sourceRef.value.discardChanges();
-    }
+    await sourceRef.value.discardChanges();
   }
-  if (mode.value === "design" && next === "source" && designRef.value) {
-    if (!designRef.value.confirmDiscardIfDirty("Discard unsaved Design changes?")) {
-      return;
-    }
-    if (designRef.value.isDirty()) {
-      designRef.value.discardChanges();
-    }
+  if (next === "source" && !(await showDesignInSource())) {
+    return;
   }
   mode.value = next;
+  if (next === "preview") {
+    await render();
+  }
 }
 
 async function createReport(): Promise<void> {
@@ -246,7 +373,14 @@ async function createReport(): Promise<void> {
   templatePath.value = path;
   documentPath.value = "";
   mode.value = "design";
-  await render();
+  clearPreview();
+}
+
+function onSourceSaved(path?: string): void {
+  if (path && path !== templatePath.value) {
+    templatePath.value = path;
+  }
+  void render();
 }
 
 async function onDesignSaved(path: string): Promise<void> {
@@ -256,6 +390,71 @@ async function onDesignSaved(path: string): Promise<void> {
     await sourceRef.value?.reloadFromDisk();
   }
   await render();
+}
+
+function clearPreview(): void {
+  stage.clear();
+  hasDocument.value = false;
+  pageCount.value = 0;
+  error.value = "";
+  consoleIssues.value = [];
+}
+
+function toggleFileMenu(): void {
+  if (fileMenuOpen.value) {
+    fileMenuOpen.value = false;
+    return;
+  }
+  fileCanSave.value =
+    editorForSave() === "source" ? !!sourceRef.value?.isDirty() : !!designRef.value?.isDirty();
+  fileMenuOpen.value = true;
+}
+
+function closeFileMenu(): void {
+  fileMenuOpen.value = false;
+}
+
+async function saveFromMenu(): Promise<void> {
+  closeFileMenu();
+  if (editorForSave() === "source") {
+    await sourceRef.value?.save();
+    return;
+  }
+  await designRef.value?.save();
+}
+
+async function saveAsFromMenu(): Promise<void> {
+  closeFileMenu();
+  if (editorForSave() === "source") {
+    await sourceRef.value?.saveAs();
+    return;
+  }
+  await designRef.value?.saveAs();
+}
+
+function onWindowKeydown(event: KeyboardEvent): void {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.repeat && templatePath.value) {
+      void saveFromMenu();
+    }
+    return;
+  }
+  if (event.key === "Escape") {
+    fileMenuOpen.value = false;
+  }
+}
+
+function onWindowPointerDown(event: PointerEvent): void {
+  if (!fileMenuOpen.value) {
+    return;
+  }
+  const target = event.target;
+  if (target instanceof Node && fileMenuEl.value?.contains(target)) {
+    return;
+  }
+  fileMenuOpen.value = false;
 }
 
 function onSourceIssues(issues: ConsoleIssue[]): void {
@@ -359,6 +558,8 @@ watch(mode, async (next) => {
 });
 
 onMounted(() => {
+  window.addEventListener("pointerdown", onWindowPointerDown);
+  window.addEventListener("keydown", onWindowKeydown, true);
   const observer = new ResizeObserver(() => {
     if (fit.value !== "none") {
       void paint();
@@ -379,12 +580,17 @@ onMounted(() => {
     { immediate: true },
   );
 });
+
+onBeforeUnmount(() => {
+  window.removeEventListener("pointerdown", onWindowPointerDown);
+  window.removeEventListener("keydown", onWindowKeydown, true);
+});
 </script>
 
 <template>
   <div class="flex h-screen flex-col bg-slate-950 text-gray-100">
     <header
-      class="titlebar relative flex h-14 shrink-0 items-center border-b border-slate-800 bg-slate-900 pr-4 pl-28"
+      class="titlebar relative z-20 flex h-14 shrink-0 items-center border-b border-slate-800 bg-slate-900 pr-4 pl-28"
     >
       <!--
         data-tauri-drag-region does not inherit to children. A full-size layer
@@ -395,29 +601,59 @@ onMounted(() => {
         class="relative z-10 flex h-full min-w-0 flex-1 items-center gap-4 pointer-events-none"
       >
         <div class="flex h-full min-w-0 items-center gap-3 pointer-events-auto">
-          <span
-            class="select-none text-[15px] font-medium leading-none tracking-tight text-white"
-          >
-            pdfrost
+          <span class="flex select-none items-baseline gap-1.5">
+            <span class="text-[15px] font-medium leading-none tracking-tight text-white">
+              pdfrost
+            </span>
+            <span class="text-[11px] font-medium leading-none text-gray-500">{{ appVersion }}</span>
           </span>
           <div class="flex items-center gap-2">
-            <FwbButton size="xs" @click="chooseTemplate">
-              <span class="inline-flex items-center gap-1.5">
-                <Icon name="folder" />
-                Open
-              </span>
-            </FwbButton>
-            <FwbButton size="xs" color="alternative" @click="createReport">New</FwbButton>
+            <div ref="fileMenuEl" class="relative">
+              <FwbButton size="xs" @click="toggleFileMenu">File</FwbButton>
+              <div
+                v-if="fileMenuOpen"
+                class="absolute top-full left-0 z-50 mt-1 w-44 rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg"
+              >
+                <button type="button" class="block w-full px-3 py-1.5 text-left text-sm text-gray-100 hover:bg-slate-800" @click="closeFileMenu(); createReport()">
+                  New Report
+                </button>
+                <button type="button" class="block w-full px-3 py-1.5 text-left text-sm text-gray-100 hover:bg-slate-800" @click="closeFileMenu(); chooseTemplate()">
+                  Open Report…
+                </button>
+                <button
+                  type="button"
+                  class="block w-full px-3 py-1.5 text-left text-sm text-gray-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:text-gray-500 disabled:hover:bg-transparent"
+                  :disabled="!fileCanSave"
+                  @click="saveFromMenu"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  class="block w-full px-3 py-1.5 text-left text-sm text-gray-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:text-gray-500 disabled:hover:bg-transparent"
+                  :disabled="!templatePath"
+                  @click="saveAsFromMenu"
+                >
+                  Save As…
+                </button>
+                <div class="my-1 border-t border-slate-800"></div>
+                <button
+                  type="button"
+                  class="block w-full px-3 py-1.5 text-left text-sm text-gray-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:text-gray-500 disabled:hover:bg-transparent"
+                  :disabled="!loaded"
+                  @click="closeFileMenu(); printPreview()"
+                >
+                  Print
+                </button>
+              </div>
+            </div>
             <FwbButton
               size="xs"
-              color="alternative"
-              :disabled="!templatePath || loading"
-              @click="chooseDocument"
+              :color="mode === 'data' ? 'default' : 'alternative'"
+              :disabled="!templatePath"
+              @click="selectMode('data')"
             >
-              <span class="inline-flex items-center gap-1.5">
-                <Icon name="file" />
-                JSON
-              </span>
+              Dataset
             </FwbButton>
             <FwbBadge v-if="templatePath" size="xs" :type="documentPath ? 'green' : 'indigo'">
               {{ dataBadge }}
@@ -462,16 +698,16 @@ onMounted(() => {
         class="flex h-full flex-col items-center justify-center gap-4 px-6"
       >
         <FwbP class="text-center text-gray-400">
-          Open a JRXML template, or create a new one.
+          Open a report from the File menu, or create a new one.
         </FwbP>
         <div class="flex items-center gap-2">
           <FwbButton @click="chooseTemplate">
             <span class="inline-flex items-center gap-1.5">
               <Icon name="folder" />
-              Open JRXML
+              Open Report
             </span>
           </FwbButton>
-          <FwbButton color="alternative" @click="createReport">New report</FwbButton>
+          <FwbButton color="alternative" @click="createReport">New Report</FwbButton>
         </div>
       </div>
 
@@ -599,10 +835,13 @@ onMounted(() => {
           ref="designRef"
           v-show="mode === 'design'"
           :template-path="templatePath"
+          :document-path="documentPath"
           :active="mode === 'design'"
           class="min-h-0 flex-1"
           @saved="onDesignSaved"
-          @create="createReport"
+          @open-template="openTemplate"
+          @open-dataset="selectMode('data')"
+          @datasets="datasets = $event"
         />
         <Source
           ref="sourceRef"
@@ -610,8 +849,20 @@ onMounted(() => {
           :template-path="templatePath"
           :active="mode === 'source'"
           class="min-h-0 flex-1"
-          @saved="render"
+          @saved="onSourceSaved"
           @issues="onSourceIssues"
+        />
+        <DataView
+          v-show="mode === 'data'"
+          :document-path="documentPath"
+          :datasets="datasets"
+          :active="mode === 'data'"
+          class="min-h-0 flex-1"
+          @pick-document="chooseDocument(true)"
+          @append-fields="(id, fields, query) => designRef?.appendFields(id, fields, query)"
+          @change-field="(id, index, patch) => designRef?.changeField(id, index, patch)"
+          @add-field="(id) => designRef?.addField(id)"
+          @remove-field="(id, index) => designRef?.removeField(id, index)"
         />
         <div
           v-show="mode === 'preview'"

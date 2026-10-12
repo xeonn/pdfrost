@@ -10,7 +10,7 @@ The templates in `jrxmls/` are JasperReports designs: warehouse and sample docum
 
 [JasperReports](https://github.com/Jaspersoft/jasperreports) is the reference project. It is written in Java. It loads a JRXML design, fills it, and exports to several formats, including HTML, PDF, Excel, and Word.
 
-pdfrost implements a subset of that library, in Rust. The subset is PDF generation for the tags and expressions in [JRXML subset](jrxml-subset.md). It is not a port of the Java project. HTML, Excel, Word, images, subreports, and the rest of the JasperReports surface stay outside the subset. Category charts (`areaChart`, `barChart`, `lineChart`, and the stacked forms) are in the subset. The plot is [pdfrost-charts](charts.md), drawn in the Chart.js 4.4.6 colors with the page font. Other chart tags stay a placeholder and a warning.
+pdfrost implements a subset of that library, in Rust. The subset is PDF generation for the tags and expressions in [JRXML subset](jrxml-subset.md). It is not a port of the Java project. HTML, Excel, Word, and the rest of the JasperReports surface stay outside the subset. A `subreport` is in the subset when its expression is a `.jrxml` path and its data is the current JSON object or a `subDataSource` array. An `image` element is in the subset when its expression is a local file path or a field that yields one. Category charts (`areaChart`, `barChart`, `lineChart`, and the stacked forms) are in the subset. The plot is [pdfrost-charts](charts.md), drawn in the Chart.js 4.4.6 colors with the page font. Other chart tags stay a placeholder and a warning.
 
 For a feature inside the subset, JasperReports 6.20.1 decides the behavior. Page geometry, band order, element position, expression results, and the marks on the page should match the PDF that library writes from the same template and the same data. Two differences are intentional: a missing value prints blank instead of the word `null`, and `new java.util.Date()` prints `YYYY-MM-DD HH:MM:SS` in UTC instead of a locale-specific date. Fill and layout rules the samples rely on are listed in [JRXML subset](jrxml-subset.md#behaviors-the-samples-require).
 
@@ -38,6 +38,8 @@ The engine is what other Rust programs embed. The Go package is what other Go pr
 `jrxmls/` is the set of documents the subset must learn to print:
 
 - `Sample.jrxml` covers a title, column headings, text fields, a line, a rectangle, and one of each supported category chart. The charts plot `Units` and `Returns` from `chartPoints`.
+- `Subreport.jrxml` fills company and contact from `SubreportData.json` and repeats `OrderLines.jrxml` over `orders`. Each order prints its number and a table of `lines`.
+- `Receipts.jrxml` fills `Receipts.json`, a list of receipt objects. The detail band prints once per receipt, and the list runs onto a second page.
 - `Receive.jrxml`, `ShipmentOut.jrxml`, `StockAdjustment.jrxml`, `InterBranchTransfer.jrxml`, `InterLocatorTransfer.jrxml`, and `InterWarehouseTransfer.jrxml` are the operational forms: labels, fields, rules, boxes, a table fed from `itemsList`, a page number, and a printed-at time.
 
 A finished slice of the engine is one that renders the templates it claims, with a fixture, to a PDF that can be compared with JasperReports 6.20.1.
@@ -45,7 +47,7 @@ A finished slice of the engine is one that renders the templates it claims, with
 ## What this system does not do
 
 - Compile JRXML to a `.jasper` file, or compile expressions to Java bytecode.
-- Run a SQL or JSON query. The caller passes one JSON document.
+- Run a SQL or JSON query. The caller passes one JSON document, an object or a list of objects.
 - Open a database, a network service, or a window from the engine.
 - Evaluate general Java expressions, parameters, or resource-bundle keys.
 - Export any format other than PDF, or set PDF encryption, PDF/A, metadata, or bookmarks.

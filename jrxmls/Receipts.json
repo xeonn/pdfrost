@@ -1,0 +1,12 @@
+[
+  { "receiptNo": "RCP-1001", "customer": "Maria Anders", "amount": 120, "note": "Counter sale" },
+  { "receiptNo": "RCP-1002", "customer": "Ana Trujillo", "amount": 86, "note": "Paid by card" },
+  { "receiptNo": "RCP-1003", "customer": "Antonio Moreno", "amount": 240, "note": "Delivery included" },
+  { "receiptNo": "RCP-1004", "customer": "Thomas Hardy", "amount": 15, "note": "Cash" },
+  { "receiptNo": "RCP-1005", "customer": "Christina Berglund", "amount": 430, "note": "Account" },
+  { "receiptNo": "RCP-1006", "customer": "Hanna Moos", "amount": 75, "note": "Paid by card" },
+  { "receiptNo": "RCP-1007", "customer": "Frederique Citeaux", "amount": 190, "note": "Counter sale" },
+  { "receiptNo": "RCP-1008", "customer": "Martin Sommer", "amount": 64, "note": "Cash" },
+  { "receiptNo": "RCP-1009", "customer": "Laurence Lebihan", "amount": 310, "note": "Account" },
+  { "receiptNo": "RCP-1010", "customer": "Elizabeth Lincoln", "amount": 28, "note": "Paid by card" }
+]

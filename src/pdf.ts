@@ -1,5 +1,5 @@
 import * as pdfjs from "pdfjs-dist";
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -10,28 +10,70 @@ export class PdfStage {
   private document: PDFDocumentProxy | null = null;
   private bytes: Uint8Array | null = null;
   private renderToken = 0;
+  private drawing: RenderTask | null = null;
+  /** Serializes load and clear so a new PDF never replaces one that is still drawing. */
+  private jobs: Promise<void> = Promise.resolve();
 
   get pageCount(): number {
     return this.document?.numPages ?? 0;
   }
 
   async load(bytes: Uint8Array): Promise<number> {
-    await this.document?.cleanup();
-    this.bytes = bytes;
-    // Keep embedded fonts as FontFace so glyph edges anti-alias in the canvas.
-    this.document = await pdfjs.getDocument({
-      data: bytes,
-      disableFontFace: false,
-      useSystemFonts: false,
-    }).promise;
-    return this.document.numPages;
+    let pages = 0;
+    await this.enqueue(async () => {
+      await this.stopDrawing();
+      await this.destroyDocument();
+      this.bytes = bytes;
+      // Keep embedded fonts as FontFace so glyph edges anti-alias in the canvas.
+      this.document = await pdfjs.getDocument({
+        data: bytes,
+        disableFontFace: false,
+        useSystemFonts: false,
+      }).promise;
+      pages = this.document.numPages;
+    });
+    return pages;
   }
 
   clear(): void {
-    void this.document?.cleanup();
-    this.document = null;
-    this.bytes = null;
+    void this.enqueue(async () => {
+      await this.stopDrawing();
+      await this.destroyDocument();
+      this.bytes = null;
+    });
+  }
+
+  private enqueue(work: () => Promise<void>): Promise<void> {
+    const run = this.jobs.then(work, work);
+    this.jobs = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /** Drop the canvas draw before the document is destroyed. */
+  private async stopDrawing(): Promise<void> {
     this.renderToken += 1;
+    const drawing = this.drawing;
+    this.drawing = null;
+    if (!drawing) {
+      return;
+    }
+    drawing.cancel();
+    try {
+      await drawing.promise;
+    } catch {
+      // A cancelled page render rejects.
+    }
+  }
+
+  private async destroyDocument(): Promise<void> {
+    const previous = this.document;
+    this.document = null;
+    if (previous) {
+      await previous.loadingTask.destroy();
+    }
   }
 
   /** Open the system print dialog for the loaded PDF. */
@@ -74,9 +116,20 @@ export class PdfStage {
       host.replaceChildren();
       return;
     }
+    const previous = this.drawing;
+    this.drawing = null;
+    previous?.cancel();
     const token = ++this.renderToken;
-    const page = await document.getPage(pageNumber);
-    if (token !== this.renderToken) {
+    let page;
+    try {
+      page = await document.getPage(pageNumber);
+    } catch (err) {
+      if (token !== this.renderToken || this.document !== document) {
+        return;
+      }
+      throw err;
+    }
+    if (token !== this.renderToken || this.document !== document) {
       return;
     }
     const base = page.getViewport({ scale: 1 });
@@ -109,13 +162,26 @@ export class PdfStage {
     }
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
-    await page.render({
+    const task = page.render({
       canvasContext: context,
       viewport,
       canvas,
       intent: "display",
-    }).promise;
-    if (token !== this.renderToken) {
+    });
+    this.drawing = task;
+    try {
+      await task.promise;
+    } catch (err) {
+      if (token !== this.renderToken) {
+        return;
+      }
+      throw err;
+    } finally {
+      if (this.drawing === task) {
+        this.drawing = null;
+      }
+    }
+    if (token !== this.renderToken || this.document !== document) {
       return;
     }
     const frame = window.document.createElement("div");

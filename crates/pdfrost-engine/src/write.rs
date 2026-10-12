@@ -26,10 +26,17 @@ pub fn write_report(report: &Report) -> String {
         write_style(&mut xml, style);
     }
     for dataset in &report.subdatasets {
-        write_subdataset(&mut xml, dataset);
+        write_subdataset(&mut xml, report, dataset);
+    }
+    if let Some(query) = &report.query {
+        let _ = writeln!(
+            xml,
+            "\t<queryString language=\"JSON\">{}</queryString>",
+            escape(query)
+        );
     }
     for field in &report.fields {
-        write_field(&mut xml, field, 1);
+        write_field(&mut xml, field, 1, report.query.as_deref());
     }
     for band in &report.bands {
         write_band(&mut xml, band);
@@ -57,15 +64,16 @@ fn write_style(xml: &mut String, style: &Style) {
     xml.push_str("\t</style>\n");
 }
 
-fn write_subdataset(xml: &mut String, dataset: &SubDataset) {
+fn write_subdataset(xml: &mut String, report: &Report, dataset: &SubDataset) {
     let _ = writeln!(xml, "\t<subDataset name=\"{}\">", escape(&dataset.name));
+    let source = dataset_source(report, &dataset.name);
     for field in &dataset.fields {
-        write_field(xml, field, 2);
+        write_field(xml, field, 2, source);
     }
     xml.push_str("\t</subDataset>\n");
 }
 
-fn write_field(xml: &mut String, field: &Field, indent: usize) {
+fn write_field(xml: &mut String, field: &Field, indent: usize, record_path: Option<&str>) {
     let pad = "\t".repeat(indent);
     let _ = writeln!(
         xml,
@@ -73,11 +81,12 @@ fn write_field(xml: &mut String, field: &Field, indent: usize) {
         escape(&field.name),
         escape(&field.class_name)
     );
-    if let Some(path) = &field.json_path {
+    if let Some(path) = field.json_path.as_deref() {
+        let expression = relative_expression(path, record_path);
         let _ = writeln!(
             xml,
             "{pad}\t<property name=\"net.sf.jasperreports.json.field.expression\" value=\"{}\"/>",
-            escape(path)
+            escape(&expression)
         );
     }
     if let Some(description) = &field.description {
@@ -88,6 +97,53 @@ fn write_field(xml: &mut String, field: &Field, indent: usize) {
         );
     }
     let _ = writeln!(xml, "{pad}</field>");
+}
+
+/// Studio's JSON field expression is relative to the query. `(root).Northwind.Customers.Address` is `Address`.
+fn relative_expression(path: &str, record_path: Option<&str>) -> String {
+    let mut rest = path.trim();
+    if let Some(after) = rest.strip_prefix("(root)") {
+        rest = after.trim_start_matches('.');
+    }
+    let Some(record) = record_path
+        .map(str::trim)
+        .filter(|record| !record.is_empty() && *record != ".")
+    else {
+        return rest.to_string();
+    };
+    let compact = record
+        .split('.')
+        .map(str::trim)
+        .filter(|part| !part.is_empty() && !part.bytes().all(|byte| byte.is_ascii_digit()))
+        .collect::<Vec<_>>()
+        .join(".");
+    let prefix = format!("{compact}.");
+    if !compact.is_empty() && rest.starts_with(&prefix) {
+        return rest[prefix.len()..].to_string();
+    }
+    rest.to_string()
+}
+
+fn dataset_source<'a>(report: &'a Report, name: &str) -> Option<&'a str> {
+    for band in &report.bands {
+        for element in &band.elements {
+            let (dataset, source) = match element {
+                Element::Table(table) => {
+                    (table.sub_dataset.as_deref(), table.data_source.as_deref())
+                }
+                Element::Chart(chart) => {
+                    (chart.sub_dataset.as_deref(), chart.data_source.as_deref())
+                }
+                _ => continue,
+            };
+            if dataset == Some(name) {
+                if let Some(source) = source.map(str::trim).filter(|source| !source.is_empty()) {
+                    return Some(source);
+                }
+            }
+        }
+    }
+    None
 }
 
 fn write_band(xml: &mut String, band: &Band) {
@@ -134,8 +190,10 @@ fn write_element(xml: &mut String, element: &Element, indent: usize) {
         Element::Line(graphic) => write_graphic(xml, indent, "line", &graphic.element),
         Element::Rectangle(graphic) => write_graphic(xml, indent, "rectangle", &graphic.element),
         Element::Ellipse(graphic) => write_graphic(xml, indent, "ellipse", &graphic.element),
+        Element::Image(image) => write_image(xml, indent, image),
         Element::Break(page_break) => write_break(xml, indent, page_break),
         Element::Chart(chart) => write_chart(xml, indent, chart),
+        Element::Subreport(subreport) => write_subreport(xml, indent, subreport),
         Element::Table(table) => write_table(xml, indent, table),
     }
 }
@@ -295,6 +353,101 @@ fn write_break(xml: &mut String, indent: usize, page_break: &PageBreak) {
     let _ = writeln!(xml, "{pad}<break type=\"{kind}\">");
     write_report_element(xml, &page_break.element, indent + 1);
     let _ = writeln!(xml, "{pad}</break>");
+}
+
+fn write_subreport(xml: &mut String, indent: usize, subreport: &Subreport) {
+    let pad = "\t".repeat(indent);
+    let _ = writeln!(xml, "{pad}<subreport>");
+    write_report_element(xml, &subreport.element, indent + 1);
+    if let Some(borders) = &subreport.element.borders {
+        write_box(xml, borders, indent + 1);
+    }
+    if let Some(source) = &subreport.data_source {
+        let _ = writeln!(
+            xml,
+            "{pad}\t<dataSourceExpression>subDataSource(\"{}\")</dataSourceExpression>",
+            escape(source)
+        );
+    }
+    if !subreport.expression.is_empty() {
+        let _ = writeln!(
+            xml,
+            "{pad}\t<subreportExpression>{}</subreportExpression>",
+            escape(&subreport.expression)
+        );
+    }
+    let _ = writeln!(xml, "{pad}</subreport>");
+}
+
+fn write_image(xml: &mut String, indent: usize, image: &Image) {
+    let pad = "\t".repeat(indent);
+    let _ = write!(xml, "{pad}<image");
+    if let Some(scale) = image.scale_image {
+        let _ = write!(xml, " scaleImage=\"{}\"", scale_image_name(scale));
+    }
+    if let Some(rotation) = image.rotation {
+        let _ = write!(xml, " rotation=\"{}\"", rotation_name(rotation));
+    }
+    if let Some(align) = image.h_align {
+        let _ = write!(xml, " hAlign=\"{}\"", image_h_align_name(align));
+    }
+    if let Some(align) = image.v_align {
+        let _ = write!(xml, " vAlign=\"{}\"", v_align(align));
+    }
+    if let Some(cache) = image.using_cache {
+        let _ = write!(xml, " isUsingCache=\"{}\"", cache);
+    }
+    if image.lazy {
+        xml.push_str(" isLazy=\"true\"");
+    }
+    if let Some(on_error) = image.on_error_type {
+        let _ = write!(xml, " onErrorType=\"{}\"", on_error_name(on_error));
+    }
+    if let Some(time) = &image.evaluation_time {
+        let _ = write!(xml, " evaluationTime=\"{}\"", escape(time));
+    }
+    if let Some(group) = &image.evaluation_group {
+        let _ = write!(xml, " evaluationGroup=\"{}\"", escape(group));
+    }
+    xml.push_str(">\n");
+    write_report_element(xml, &image.element, indent + 1);
+    if let Some(borders) = &image.element.borders {
+        write_box(xml, borders, indent + 1);
+    }
+    if !image.expression.is_empty() {
+        let _ = write!(xml, "{pad}\t<imageExpression");
+        if let Some(class) = &image.expression_class {
+            let _ = write!(xml, " class=\"{}\"", escape(class));
+        }
+        let _ = writeln!(xml, ">{}</imageExpression>", escape(&image.expression));
+    }
+    let _ = writeln!(xml, "{pad}</image>");
+}
+
+fn scale_image_name(scale: ScaleImage) -> &'static str {
+    match scale {
+        ScaleImage::Clip => "Clip",
+        ScaleImage::FillFrame => "FillFrame",
+        ScaleImage::RetainShape => "RetainShape",
+        ScaleImage::RealHeight => "RealHeight",
+        ScaleImage::RealSize => "RealSize",
+    }
+}
+
+fn image_h_align_name(align: HorizontalImageAlign) -> &'static str {
+    match align {
+        HorizontalImageAlign::Left => "Left",
+        HorizontalImageAlign::Center => "Center",
+        HorizontalImageAlign::Right => "Right",
+    }
+}
+
+fn on_error_name(on_error: OnErrorType) -> &'static str {
+    match on_error {
+        OnErrorType::Error => "Error",
+        OnErrorType::Blank => "Blank",
+        OnErrorType::Icon => "Icon",
+    }
 }
 
 fn write_graphic(xml: &mut String, indent: usize, tag: &str, element: &ReportElement) {

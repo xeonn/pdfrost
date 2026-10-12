@@ -12,13 +12,13 @@ The model holds the report name, page width and height, margins, styles, fields,
 
 Field definitions keep `net.sf.jasperreports.json.field.expression` when it is present. That path is how a later fill reads `audit.created` or `product.id` from the JSON document. A field with no such property is read by its field name.
 
-Parse fails when the XML is not a `jasperReport` document. It does not fail because a chart, an image, or another unsupported tag is present.
+Parse fails when the XML is not a `jasperReport` document. It does not fail because a chart or another unsupported tag is present.
 
 ## 2. Fill
 
 Walk the model and bind it to the JSON document.
 
-The document is one JSON object, and that object is the single main record. Title, detail, and the page bands fill from it once. The engine does not walk a list of root records and does not execute `queryString`. Text fields outside a table read `$F{name}` from that object, using the field's JSON path when the template defines one. A field whose `class` is `java.lang.Integer` prints a JSON number or a numeric string as digits. The samples declare no `pattern`.
+The document is one JSON value. A JSON `queryString` that names a path in that value selects the main records. An empty query leaves the value as it is. An object is one main record, so the title, detail, and page bands fill from it once. An array is one record per element: the detail band repeats, the title sees the first element, and the summary sees the last. A later page keeps the record that caused the break. `render` receives the value already parsed. `render_read` reads a root array one element at a time, so the rest of the list is not held as a tree. A list inside one object, such as `itemsList`, stays with that object. A table or chart walks `subDataSource` on the current record, and on the original document when the current record does not have that list. Text fields outside a table read `$F{name}` from the current record. The JSON field expression is relative to the query, such as `Address` when the query is `Northwind.Customers`. A path that starts with `(root)` is still read from the document, and a list in that path uses the current record. Any other path is read from the current record, using the field's JSON path when the template defines one. A field whose `class` is `java.lang.Integer` prints a JSON number or a numeric string as digits. The samples declare no `pattern`.
 
 A table's `dataSourceExpression` must be a `subDataSource("…")` call. The string is a property of the same document whose value is an array. The operational templates all use `itemsList`. Each object in that array is one detail row. Fields declared inside that `subDataset` stay on the dataset. They are not aliases of the main report fields. The table reads `$F{…}` from the row.
 
@@ -36,7 +36,7 @@ Any other expression text produces a warning and an empty value. A missing field
 
 ## 3. Layout
 
-Place filled elements on pages.
+Place filled elements on pages. When a page is full, it is drawn into the PDF and its layout boxes are dropped before the next page starts. The PDF still holds the painted pages until the file is finished.
 
 Page content width is `pageWidth - leftMargin - rightMargin`. Content height is `pageHeight - topMargin - bottomMargin`.
 
@@ -45,7 +45,7 @@ Band order follows JasperReports for the bands this subset supports:
 1. `title` on the first page.
 2. `pageHeader` on every page.
 3. `columnHeader` where the template defines it.
-4. `detail`, including a table that grows with its rows.
+4. `detail`, once for an object and once per element for an array, including a table that grows with its rows.
 5. `summary` after the detail.
 6. `columnFooter` above the page footer on every page. Its height stays clear of the bands above.
 7. `pageFooter` on every page.
@@ -53,7 +53,7 @@ Band order follows JasperReports for the bands this subset supports:
 
 Every sample band sets `splitType="Stretch"`. Layout does not start that band unless the space remaining on the page is at least the band's declared height. A table row or a detail band that does not fit moves to the next page. The page header, the page footer, and the table's `jr:columnHeader` repeat on the new page. `$V{PAGE_NUMBER}` is the number of that page. There is no "Page X of Y": no text field sets `evaluationTime="Report"`.
 
-Elements on a band paint in document order. A rectangle listed before a label stays behind that label. An `elementGroup` is flattened onto that band, so its children keep their own coordinates. An `ellipse` is drawn in its element box. A `break` of type `Page` or `Column` in the title, detail, or summary opens the next page, and the elements after it in that band are placed from the new page.
+Elements on a band paint in document order. A rectangle listed before a label stays behind that label. An `elementGroup` is flattened onto that band, so its children keep their own coordinates. An `ellipse` is drawn in its element box. An `image` draws a PNG or JPEG from a quoted path or from `$F{name}` when that field is a path. `RealHeight` and `RealSize` can grow the band. The picture is loaded while the page is drawn, including when `evaluationTime` is not `Now`. A `break` of type `Page` or `Column` in the title, detail, or summary opens the next page, and the elements after it in that band are placed from the new page.
 
 A `jr:table` with `whenNoDataType="AllSectionsNoDetail"` still lays out its header sections when `itemsList` is missing or empty, and lays out no detail cells. A `jr:columnFooter` with a height and no children still consumes that height.
 

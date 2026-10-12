@@ -2,14 +2,14 @@
 
 Go programs render a template by importing `github.com/xeonn/pdfrost/go`. The package is a wrapper. Parsing, fill, layout, and PDF export stay in `crates/pdfrost-engine`. The Go code does not read JRXML.
 
-The module lives in `go/`, so a release tag is `go/v0.1.0` and another project depends on it with:
+The module lives in `go/`, so a release tag is `go/v0.2.0` and another project depends on it with:
 
 ```go
-require github.com/xeonn/pdfrost/go v0.1.0
+require github.com/xeonn/pdfrost/go v0.2.0
 ```
 
 ```bash
-go get github.com/xeonn/pdfrost/go@v0.1.0
+go get github.com/xeonn/pdfrost/go@v0.2.0
 ```
 
 `go get` downloads the module zip, including the committed `engine.wasm`. The first build compiles the Go wrapper only. At runtime the wrapper starts that file with [wazero](https://github.com/tetratelabs/wazero). Cargo is not required.
@@ -25,7 +25,7 @@ result, err := pdfrost.Render(templateXML, document, renderedAt)
 | Argument | Meaning |
 | --- | --- |
 | `templateXML` | The `.jrxml` text. |
-| `document` | One JSON object, the same document the Rust `render` function accepts. |
+| `document` | One JSON value. An object is one record. An array is one record per element, held in memory. The Rust library's `render_read` streams a root array; this package does not. |
 | `renderedAt` | The UTC instant printed for `new java.util.Date()`. |
 
 `result.PDF` is the file bytes. `result.Warnings` lists unsupported tags and missing fields. `err` is set when the template is not readable JRXML. A warning alone does not set `err`.
@@ -57,7 +57,7 @@ go test ./...
 
 That test renders `jrxmls/Sample.jrxml` with the embedded wasm. The category charts are plotted from `chartPoints`, so the result does not carry a `chart` warning.
 
-Rebuild `engine.wasm` after an engine change, then copy it into the module so the next tag ships the new bytes:
+`go/engine.wasm` is updated only when a release of the Go module is planned. Engine changes on `development` do not refresh the embed. When that release is being prepared, rebuild the blob and commit it so the tag ships the new bytes:
 
 ```bash
 rustup target add wasm32-unknown-unknown

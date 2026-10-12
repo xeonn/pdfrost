@@ -60,7 +60,7 @@ Frontend dependencies stay on Bun (`package.json` declares `packageManager` `bun
 
 The shell, a Rust crate, and the Go package use one operation:
 
-- Input: JRXML text (or a path the shell has already read) and one JSON document.
+- Input: JRXML text (or a path the shell has already read) and one JSON document. An object is one record. A list of objects is one record per entry, and the desktop preview reads that list one entry at a time.
 - Output: PDF bytes, plus a list of warnings for tags and expressions the subset does not implement.
 
 A warning does not by itself fail the render. The PDF contains the supported content. The warning names the gap. A template that cannot be parsed, or a supported expression that cannot be filled because the data is missing, is an error and yields no PDF.

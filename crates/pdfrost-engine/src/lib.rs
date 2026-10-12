@@ -1,19 +1,26 @@
 //! Report engine for pdfrost. Callers pass JRXML and one JSON document and
-//! receive PDF bytes. [`parse`] reads the template. [`render`] fills fields,
-//! lays out tables and pages, and draws the PDF. [`write_report`] writes the
-//! supported subset back to JRXML.
+//! receive PDF bytes. An object is one record. An array is one record per
+//! element. [`parse`] reads the template. [`render`] fills fields, lays out
+//! tables and pages, and draws the PDF. [`render_read`] reads a root array one
+//! element at a time. [`write_report`] writes the supported subset back to JRXML.
 
 mod chart;
 mod draw;
 mod expr;
 mod fill;
+mod image;
 mod model;
 mod parse;
+mod subreport;
 mod write;
+
+use std::io::{BufRead, BufReader, Read};
+use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
+pub use image::read_image_bytes;
 pub use model::*;
 pub use parse::parse;
 pub use write::write_report;
@@ -74,6 +81,8 @@ pub enum PlacementKind {
     Line,
     Rectangle,
     Ellipse,
+    /// An image box. `text` is the image expression.
+    Image,
     /// A chart box. `text` is the element tag when the series is plotted, or `Chart` for a placeholder.
     Chart,
 }
@@ -91,20 +100,93 @@ pub enum Error {
     Font,
     #[error("PDF could not be written")]
     Pdf,
+    #[error("the document is not JSON: {0}")]
+    Json(String),
 }
 
 /// Render `template_xml` with one JSON `document`.
 ///
+/// An object is one record: the title, detail, and summary all see it. An array
+/// is one record per element. The detail band repeats, the title sees the first
+/// element, and the summary sees the last. The array is already in memory here.
+/// [`render_read`] reads a root array one element at a time.
+///
 /// `rendered_at` is the instant printed for `new java.util.Date()`.
-/// Static labels, lines, rectangles, `$F` values, and tables are drawn.
+/// Static labels, lines, rectangles, images, `$F` values, and tables are drawn.
 /// `new java.util.Date()` prints `rendered_at` as `YYYY-MM-DD HH:MM:SS` in UTC.
+/// Image paths are resolved from the process directory. [`render_with_assets`]
+/// also looks beside the template.
 pub fn render(
     template_xml: &str,
     document: &Value,
     rendered_at: DateTime<Utc>,
 ) -> Result<RenderOutput, Error> {
+    render_with_assets(template_xml, document, rendered_at, None)
+}
+
+/// Same as [`render`], and relative image paths are tried in `asset_dir` first.
+pub fn render_with_assets(
+    template_xml: &str,
+    document: &Value,
+    rendered_at: DateTime<Utc>,
+    asset_dir: Option<&Path>,
+) -> Result<RenderOutput, Error> {
     let report = parse(template_xml)?;
-    draw::draw(&report, document, rendered_at)
+    draw::draw(&report, document, rendered_at, asset_dir)
+}
+
+/// Same as [`render_read_with_assets`] with image paths resolved from the process directory.
+pub fn render_read<R: Read>(
+    template_xml: &str,
+    reader: R,
+    rendered_at: DateTime<Utc>,
+) -> Result<RenderOutput, Error> {
+    render_read_with_assets(template_xml, reader, rendered_at, None)
+}
+
+/// Render from a JSON reader.
+///
+/// A root array is read one element at a time, so a long list of documents does
+/// not have to reside as one tree. Any other JSON value is read whole and filled
+/// as one record. Relative image paths are tried in `asset_dir` first.
+pub fn render_read_with_assets<R: Read>(
+    template_xml: &str,
+    reader: R,
+    rendered_at: DateTime<Utc>,
+    asset_dir: Option<&Path>,
+) -> Result<RenderOutput, Error> {
+    let report = parse(template_xml)?;
+    let mut reader = BufReader::new(reader);
+    if starts_with_array(&mut reader)? {
+        draw::draw_array(&report, reader, rendered_at, asset_dir)
+    } else {
+        let document =
+            serde_json::from_reader(reader).map_err(|err| Error::Json(err.to_string()))?;
+        draw::draw(&report, &document, rendered_at, asset_dir)
+    }
+}
+
+/// True when the next non-space byte is `[`. That byte stays in the buffer.
+fn starts_with_array<R: Read>(reader: &mut BufReader<R>) -> Result<bool, Error> {
+    let buffered = reader
+        .fill_buf()
+        .map_err(|err| Error::Json(err.to_string()))?;
+    if buffered.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        reader.consume(3);
+    }
+    loop {
+        let buffered = reader
+            .fill_buf()
+            .map_err(|err| Error::Json(err.to_string()))?;
+        if buffered.is_empty() {
+            return Err(Error::Json("the document is empty".to_string()));
+        }
+        match buffered[0] {
+            b' ' | b'\n' | b'\r' | b'\t' => reader.consume(1),
+            b'[' => return Ok(true),
+            _ => return Ok(false),
+        }
+    }
 }
 
 #[cfg(test)]
