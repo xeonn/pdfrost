@@ -83,6 +83,11 @@ function isDirty(): boolean {
   return dirty.value;
 }
 
+function contents(): string {
+  syncFromView();
+  return source.value;
+}
+
 async function reloadFromDisk(): Promise<void> {
   await load();
 }
@@ -92,6 +97,7 @@ defineExpose({
   dirty,
   jumpTo,
   isDirty,
+  contents,
   reloadFromDisk,
   discardChanges: reloadFromDisk,
   save,

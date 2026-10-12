@@ -30,19 +30,19 @@ fn warning_dtos(warnings: Vec<pdfrost_engine::Warning>) -> Vec<WarningDto> {
         .collect()
 }
 
-#[tauri::command]
-fn render_report(template_path: String, document_path: Option<String>) -> Result<Rendered, String> {
-    let template = std::fs::read_to_string(&template_path)
-        .map_err(|err| format!("could not read the template: {err}"))?;
-    let asset_dir = std::path::Path::new(&template_path).parent();
+fn render_loaded(
+    template: &str,
+    asset_dir: Option<&std::path::Path>,
+    document_path: Option<String>,
+) -> Result<Rendered, String> {
     let output = match document_path.as_deref().filter(|path| !path.is_empty()) {
         Some(path) => {
             let file = std::fs::File::open(path)
                 .map_err(|err| format!("could not read the document: {err}"))?;
-            pdfrost_engine::render_read_with_assets(&template, file, Utc::now(), asset_dir)
+            pdfrost_engine::render_read_with_assets(template, file, Utc::now(), asset_dir)
         }
         None => pdfrost_engine::render_with_assets(
-            &template,
+            template,
             &serde_json::json!({}),
             Utc::now(),
             asset_dir,
@@ -53,6 +53,40 @@ fn render_report(template_path: String, document_path: Option<String>) -> Result
         pdf: output.pdf,
         warnings: warning_dtos(output.warnings),
     })
+}
+
+#[tauri::command]
+fn render_report(template_path: String, document_path: Option<String>) -> Result<Rendered, String> {
+    let template = std::fs::read_to_string(&template_path)
+        .map_err(|err| format!("could not read the template: {err}"))?;
+    render_loaded(
+        &template,
+        std::path::Path::new(&template_path).parent(),
+        document_path,
+    )
+}
+
+/// Render the report currently open in the designer, including edits that have not been saved.
+#[tauri::command]
+fn render_template(
+    template: String,
+    asset_dir: Option<String>,
+    document_path: Option<String>,
+) -> Result<Rendered, String> {
+    let asset = asset_dir
+        .as_deref()
+        .filter(|path| !path.is_empty())
+        .map(std::path::Path::new);
+    render_loaded(&template, asset, document_path)
+}
+
+/// JRXML for the in-memory report, using the same writer as Save.
+#[tauri::command]
+fn report_xml(mut report: pdfrost_engine::Report) -> Result<String, String> {
+    report.column_width = (report.page_width - report.left_margin - report.right_margin).max(0.0);
+    let xml = pdfrost_engine::write_report(&report);
+    pdfrost_engine::parse(&xml).map_err(|err| format!("the template could not be parsed: {err}"))?;
+    Ok(xml)
 }
 
 #[tauri::command]
@@ -160,6 +194,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             render_report,
+            render_template,
+            report_xml,
             validate_template,
             read_template,
             write_template,

@@ -115,6 +115,8 @@ const DRAG_FIELD = "application/pdfrost-field";
 const error = ref("");
 const loading = ref(false);
 const saving = ref(false);
+const status = ref("");
+let keepOpenPath = "";
 const loadWarnings = ref<Warning[]>([]);
 const lossyConfirmed = ref(true);
 const confirmedPaths = new Set<string>();
@@ -591,6 +593,7 @@ function dropNoopUndo(): void {
 }
 
 function edit(mutate: () => void): void {
+  status.value = "";
   pushUndo();
   mutate();
   dropNoopUndo();
@@ -601,6 +604,7 @@ function undo(): void {
   if (!previous) {
     return;
   }
+  status.value = "";
   report.value = JSON.parse(previous) as Report;
   editing.value = null;
 }
@@ -707,7 +711,12 @@ async function saveDesign(asNew: boolean): Promise<void> {
   try {
     await invoke("save_report", { path, report: report.value });
     savedSnapshot.value = JSON.stringify(report.value);
+    status.value = "Saved";
+    keepOpenPath = path;
     emit("saved", path);
+    if (props.templatePath === path) {
+      keepOpenPath = "";
+    }
   } catch (err) {
     error.value = message(err);
   } finally {
@@ -1242,11 +1251,6 @@ function onKeydown(event: KeyboardEvent): void {
   }
   const target = event.target as HTMLElement | null;
   const typing = !!target?.closest("input, textarea, select");
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-    event.preventDefault();
-    void saveDesign(false);
-    return;
-  }
   if ((event.metaKey || event.ctrlKey) && (event.key === "=" || event.key === "+")) {
     event.preventDefault();
     zoomBy(1);
@@ -1951,10 +1955,18 @@ const datasetChoices = computed(() => {
 
 watch(datasetChoices, (choices) => emit("datasets", choices), { immediate: true });
 
+function currentReport(): Report | null {
+  if (!report.value) {
+    return null;
+  }
+  return JSON.parse(JSON.stringify(report.value)) as Report;
+}
+
 defineExpose({
   confirmDiscardIfDirty,
   discardChanges,
   isDirty,
+  currentReport,
   save: () => saveDesign(false),
   saveAs: () => saveDesign(true),
   appendFields,
@@ -1965,10 +1977,14 @@ defineExpose({
 
 watch(
   () => props.templatePath,
-  () => {
+  (next) => {
+    if (next && next === keepOpenPath) {
+      keepOpenPath = "";
+      return;
+    }
     void load();
   },
-  { immediate: true },
+  { immediate: true, flush: "sync" },
 );
 
 watch(
@@ -2051,7 +2067,12 @@ onBeforeUnmount(() => {
       <FwbButton size="xs" color="alternative" :disabled="undoStack.length === 0" @click="undo">
         Undo
       </FwbButton>
+      <FwbButton size="xs" :disabled="!report || saving" @click="saveDesign(false)">Save</FwbButton>
+      <FwbButton size="xs" color="alternative" :disabled="!report || saving" @click="saveDesign(true)">
+        Save As…
+      </FwbButton>
       <span v-if="dirty" class="text-xs font-medium text-amber-400">Unsaved changes</span>
+      <span v-else-if="status" class="text-xs text-gray-400">{{ status }}</span>
       <span v-if="error" class="min-w-0 flex-1 truncate text-xs text-red-400">{{ error }}</span>
       <div class="ml-auto flex items-center gap-1">
         <FwbButtonGroup>

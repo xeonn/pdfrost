@@ -30,6 +30,7 @@ const modes: { id: Mode; label: string }[] = [
 ];
 const templatePath = ref("");
 const documentPath = ref("");
+const draftEditor = ref<"design" | "source">("design");
 const error = ref("");
 const loading = ref(false);
 const hasDocument = ref(false);
@@ -40,6 +41,7 @@ const sourceRef = ref<{
   isDirty: () => boolean;
   discardChanges: () => Promise<void>;
   reloadFromDisk: () => Promise<void>;
+  contents: () => string;
   save: () => Promise<void>;
   saveAs: () => Promise<void>;
 } | null>(null);
@@ -47,6 +49,7 @@ const designRef = ref<{
   confirmDiscardIfDirty: (message?: string) => boolean;
   discardChanges: () => void;
   isDirty: () => boolean;
+  currentReport: () => unknown;
   save: () => Promise<void>;
   saveAs: () => Promise<void>;
   appendFields: (id: string, fields: { name: string; className: string; jsonPath: string }[], query?: string | null) => void;
@@ -191,6 +194,46 @@ function setConsoleFromRender(warnings: Rendered["warnings"], renderError?: stri
   consoleIssues.value = issues;
 }
 
+function directoryOf(file: string): string {
+  const index = Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\"));
+  return index >= 0 ? file.slice(0, index) : "";
+}
+
+function editorForSave(): "design" | "source" {
+  if (mode.value === "source") {
+    return "source";
+  }
+  if (mode.value === "design" || mode.value === "data") {
+    return "design";
+  }
+  return draftEditor.value;
+}
+
+function editorForRender(): "design" | "source" {
+  if (mode.value === "source") {
+    return "source";
+  }
+  if (mode.value === "design" || mode.value === "data") {
+    return "design";
+  }
+  return draftEditor.value;
+}
+
+async function templateXml(): Promise<string> {
+  if (editorForRender() === "source") {
+    const xml = sourceRef.value?.contents()?.trim() ?? "";
+    if (xml) {
+      return xml;
+    }
+  } else {
+    const report = designRef.value?.currentReport();
+    if (report) {
+      return await invoke<string>("report_xml", { report });
+    }
+  }
+  return await invoke<string>("read_template", { path: templatePath.value });
+}
+
 async function render(): Promise<void> {
   if (!templatePath.value) {
     return;
@@ -199,8 +242,13 @@ async function render(): Promise<void> {
   loading.value = true;
   error.value = "";
   try {
-    const rendered = await invoke<Rendered>("render_report", {
-      templatePath: templatePath.value,
+    const template = await templateXml();
+    if (generation !== renderGeneration) {
+      return;
+    }
+    const rendered = await invoke<Rendered>("render_template", {
+      template,
+      assetDir: directoryOf(templatePath.value) || null,
       documentPath: documentPath.value || null,
     });
     if (generation !== renderGeneration) {
@@ -239,7 +287,14 @@ async function selectMode(next: Mode): Promise<void> {
   if (next === mode.value) {
     return;
   }
-  if (mode.value === "source" && next !== "source" && sourceRef.value) {
+  if (mode.value === "design" || mode.value === "source") {
+    draftEditor.value = mode.value;
+  }
+  if (mode.value === "data") {
+    draftEditor.value = "design";
+  }
+  const editing = mode.value === "preview" ? draftEditor.value : mode.value;
+  if (next !== "preview" && editing === "source" && next !== "source" && sourceRef.value) {
     if (!sourceRef.value.confirmDiscardIfDirty("Discard unsaved Source changes?")) {
       return;
     }
@@ -247,7 +302,7 @@ async function selectMode(next: Mode): Promise<void> {
       await sourceRef.value.discardChanges();
     }
   }
-  if (mode.value === "design" && next === "source" && designRef.value) {
+  if (next !== "preview" && editing === "design" && next === "source" && designRef.value) {
     if (!designRef.value.confirmDiscardIfDirty("Discard unsaved Design changes?")) {
       return;
     }
@@ -256,6 +311,9 @@ async function selectMode(next: Mode): Promise<void> {
     }
   }
   mode.value = next;
+  if (next === "preview" && documentPath.value) {
+    await render();
+  }
 }
 
 async function createReport(): Promise<void> {
@@ -325,7 +383,7 @@ function toggleFileMenu(): void {
     return;
   }
   fileCanSave.value =
-    mode.value === "source" ? !!sourceRef.value?.isDirty() : !!designRef.value?.isDirty();
+    editorForSave() === "source" ? !!sourceRef.value?.isDirty() : !!designRef.value?.isDirty();
   fileMenuOpen.value = true;
 }
 
@@ -335,7 +393,7 @@ function closeFileMenu(): void {
 
 async function saveFromMenu(): Promise<void> {
   closeFileMenu();
-  if (mode.value === "source") {
+  if (editorForSave() === "source") {
     await sourceRef.value?.save();
     return;
   }
@@ -344,7 +402,7 @@ async function saveFromMenu(): Promise<void> {
 
 async function saveAsFromMenu(): Promise<void> {
   closeFileMenu();
-  if (mode.value === "source") {
+  if (editorForSave() === "source") {
     await sourceRef.value?.saveAs();
     return;
   }
@@ -352,6 +410,14 @@ async function saveAsFromMenu(): Promise<void> {
 }
 
 function onWindowKeydown(event: KeyboardEvent): void {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.repeat && templatePath.value) {
+      void saveFromMenu();
+    }
+    return;
+  }
   if (event.key === "Escape") {
     fileMenuOpen.value = false;
   }
@@ -470,7 +536,7 @@ watch(mode, async (next) => {
 
 onMounted(() => {
   window.addEventListener("pointerdown", onWindowPointerDown);
-  window.addEventListener("keydown", onWindowKeydown);
+  window.addEventListener("keydown", onWindowKeydown, true);
   const observer = new ResizeObserver(() => {
     if (fit.value !== "none") {
       void paint();
@@ -494,7 +560,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("pointerdown", onWindowPointerDown);
-  window.removeEventListener("keydown", onWindowKeydown);
+  window.removeEventListener("keydown", onWindowKeydown, true);
 });
 </script>
 
