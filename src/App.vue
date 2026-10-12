@@ -19,6 +19,7 @@ import { type ConsoleIssue, lineFromMessage } from "./console";
 import { FitMode, PdfStage } from "./pdf";
 import { blankReport } from "./report";
 import type { Rendered } from "./types";
+import { version as appVersion } from "../package.json";
 
 type Mode = "design" | "source" | "data" | "preview";
 
@@ -600,10 +601,11 @@ onBeforeUnmount(() => {
         class="relative z-10 flex h-full min-w-0 flex-1 items-center gap-4 pointer-events-none"
       >
         <div class="flex h-full min-w-0 items-center gap-3 pointer-events-auto">
-          <span
-            class="select-none text-[15px] font-medium leading-none tracking-tight text-white"
-          >
-            pdfrost
+          <span class="flex select-none items-baseline gap-1.5">
+            <span class="text-[15px] font-medium leading-none tracking-tight text-white">
+              pdfrost
+            </span>
+            <span class="text-[11px] font-medium leading-none text-gray-500">{{ appVersion }}</span>
           </span>
           <div class="flex items-center gap-2">
             <div ref="fileMenuEl" class="relative">
