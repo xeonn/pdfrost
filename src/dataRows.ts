@@ -94,6 +94,62 @@ export function previewTable(root: unknown, path: string): DataTable {
   return { columns, rows, total: records.length, missing: false };
 }
 
+export type ReadField = {
+  name: string;
+  className: string;
+  jsonPath: string;
+};
+
+/**
+ * Columns at `path` become fields. A list or object is skipped.
+ * A column is an Integer only when every value is a whole number.
+ * `null` means the path is not in the document.
+ */
+export function readFields(root: unknown, path: string): ReadField[] | null {
+  const value = valueAt(root, path);
+  if (value === undefined) {
+    return null;
+  }
+  const records = Array.isArray(value) ? value : [value];
+  const shown = records.slice(0, DATA_ROW_LIMIT);
+  const columns = previewTable(root, path).columns;
+  const fields: ReadField[] = [];
+  for (const column of columns) {
+    const className = classNameFor(shown, column);
+    if (!className) {
+      continue;
+    }
+    fields.push({ name: column, className, jsonPath: column });
+  }
+  return fields;
+}
+
+function classNameFor(records: unknown[], column: string): string | null {
+  let integer = true;
+  let any = false;
+  for (const record of records) {
+    const value = valueOf(record, column);
+    if (value === undefined || value === null || typeof value === "object") {
+      continue;
+    }
+    any = true;
+    if (typeof value !== "number" || !Number.isInteger(value)) {
+      integer = false;
+    }
+  }
+  if (!any) {
+    return null;
+  }
+  return integer ? "java.lang.Integer" : "java.lang.String";
+}
+
+function valueOf(record: unknown, column: string): unknown {
+  if (record !== null && typeof record === "object" && !Array.isArray(record)) {
+    return (record as Record<string, unknown>)[column];
+  }
+  return column === "value" ? record : undefined;
+}
+
 function cellText(value: unknown): string {
   if (value === null || value === undefined) {
     return "";

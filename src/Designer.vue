@@ -27,6 +27,7 @@ import {
   elementLabel,
   ensureBand,
   expressionChoices,
+  fieldsFromDiscovery,
   hexColor,
   nudge,
   orderedSections,
@@ -48,6 +49,7 @@ import {
   type CategorySeries,
   type ColumnSection,
   type Element,
+  type Field,
   type Handle,
   type Report,
   type ReportElement,
@@ -56,7 +58,12 @@ import {
 } from "./report";
 
 const props = defineProps<{ templatePath: string; documentPath?: string; active?: boolean }>();
-const emit = defineEmits<{ saved: [path: string]; openTemplate: [path: string]; openDataset: [] }>();
+const emit = defineEmits<{
+  saved: [path: string];
+  openTemplate: [path: string];
+  openDataset: [];
+  datasets: [datasets: { id: string; name: string; fields: Field[] }[]];
+}>();
 
 type Selection =
   | { kind: "report" }
@@ -1820,12 +1827,123 @@ function isDirty(): boolean {
   return dirty.value;
 }
 
+function fieldsFor(id: string): Field[] | null {
+  if (!report.value) {
+    return null;
+  }
+  if (id === "report") {
+    return report.value.fields;
+  }
+  const index = Number(id);
+  return report.value.subdatasets[index]?.fields ?? null;
+}
+
+function replaceFields(id: string, found: { name: string; className: string; jsonPath: string }[]): void {
+  edit(() => {
+    const list = fieldsFor(id);
+    if (!list) {
+      return;
+    }
+    const next = fieldsFromDiscovery(list, found);
+    list.splice(0, list.length, ...next);
+    const current = selection.value;
+    if (id === "report" && (current.kind === "field" || current.kind === "fields")) {
+      selection.value = { kind: "fields" };
+    }
+    if (id !== "report" && current.kind === "datasetField" && String(current.dataset) === id) {
+      selection.value = { kind: "dataset", index: current.dataset };
+    }
+  });
+}
+
+function changeField(
+  id: string,
+  index: number,
+  patch: { name?: string; className?: string; jsonPath?: string | null },
+): void {
+  edit(() => {
+    const field = fieldsFor(id)?.[index];
+    if (!field) {
+      return;
+    }
+    if (patch.name !== undefined) {
+      field.name = patch.name;
+    }
+    if (patch.className !== undefined) {
+      field.className = patch.className;
+    }
+    if ("jsonPath" in patch) {
+      field.jsonPath = patch.jsonPath || null;
+    }
+  });
+}
+
+function addField(id: string): void {
+  if (!report.value) {
+    return;
+  }
+  if (id === "report") {
+    addFieldFromProperties();
+    return;
+  }
+  const index = Number(id);
+  edit(() => {
+    const dataset = report.value?.subdatasets[index];
+    if (!dataset) {
+      return;
+    }
+    const fieldIndex = addDatasetField(dataset);
+    selection.value = { kind: "datasetField", dataset: index, index: fieldIndex };
+  });
+}
+
+function removeField(id: string, index: number): void {
+  edit(() => {
+    const list = fieldsFor(id);
+    if (!list || !list[index]) {
+      return;
+    }
+    list.splice(index, 1);
+    if (id === "report") {
+      selection.value = { kind: "fields" };
+      return;
+    }
+    const dataset = Number(id);
+    selection.value = { kind: "dataset", index: dataset };
+  });
+}
+
+const datasetChoices = computed(() => {
+  const current = report.value;
+  if (!current) {
+    return [];
+  }
+  return [
+    {
+      id: "report",
+      name: current.name || "Report",
+      fields: current.fields.map((field) => ({ ...field })),
+    },
+    ...current.subdatasets.map((dataset, index) => ({
+      id: String(index),
+      name: dataset.name || "Dataset",
+      fields: dataset.fields.map((field) => ({ ...field })),
+    })),
+  ];
+});
+
+watch(datasetChoices, (choices) => emit("datasets", choices), { immediate: true });
+
 defineExpose({
   confirmDiscardIfDirty,
   discardChanges,
   isDirty,
   save: () => saveDesign(false),
   saveAs: () => saveDesign(true),
+  replaceFields,
+  changeField,
+  addField,
+  removeField,
 });
 
 watch(

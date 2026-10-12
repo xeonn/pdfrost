@@ -49,10 +49,19 @@ const designRef = ref<{
   isDirty: () => boolean;
   save: () => Promise<void>;
   saveAs: () => Promise<void>;
+  replaceFields: (id: string, fields: { name: string; className: string; jsonPath: string }[]) => void;
+  changeField: (
+    id: string,
+    index: number,
+    patch: { name?: string; className?: string; jsonPath?: string | null },
+  ) => void;
+  addField: (id: string) => void;
+  removeField: (id: string, index: number) => void;
 } | null>(null);
 const fileMenuOpen = ref(false);
 const fileCanSave = ref(false);
 const fileMenuEl = ref<HTMLElement | null>(null);
+const datasets = ref<{ id: string; name: string; fields: { name: string; className: string; description: string | null; jsonPath: string | null }[] }[]>([]);
 let renderGeneration = 0;
 
 const stage = new PdfStage();
@@ -742,6 +751,7 @@ onBeforeUnmount(() => {
           @saved="onDesignSaved"
           @open-template="openTemplate"
           @open-dataset="selectMode('data')"
+          @datasets="datasets = $event"
         />
         <Source
           ref="sourceRef"
@@ -755,9 +765,14 @@ onBeforeUnmount(() => {
         <DataView
           v-show="mode === 'data'"
           :document-path="documentPath"
+          :datasets="datasets"
           :active="mode === 'data'"
           class="min-h-0 flex-1"
           @pick-document="chooseDocument(true)"
+          @replace-fields="(id, fields) => designRef?.replaceFields(id, fields)"
+          @change-field="(id, index, patch) => designRef?.changeField(id, index, patch)"
+          @add-field="(id) => designRef?.addField(id)"
+          @remove-field="(id, index) => designRef?.removeField(id, index)"
         />
         <div
           v-show="mode === 'preview'"

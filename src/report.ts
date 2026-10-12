@@ -603,6 +603,20 @@ export function removeColumn(table: Extract<Element, { type: "table" }>, index: 
   syncTableBox(table);
 }
 
+/** Read Fields keeps a description already stored for the same name. */
+export function fieldsFromDiscovery(
+  previous: Field[],
+  found: { name: string; className: string; jsonPath: string }[],
+): Field[] {
+  const prior = new Map(previous.map((field) => [field.name, field]));
+  return found.map((item) => ({
+    name: item.name,
+    className: item.className,
+    description: prior.get(item.name)?.description ?? null,
+    jsonPath: item.jsonPath,
+  }));
+}
+
 export function addMainField(report: Report): number {
   const name = uniqueName(
     report.fields.map((field) => field.name),

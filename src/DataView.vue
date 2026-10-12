@@ -3,16 +3,31 @@ import { computed, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { FwbButton } from "flowbite-vue";
 import JsonTree from "./JsonTree.vue";
-import { defaultPath, previewTable } from "./dataRows";
+import { defaultPath, previewTable, readFields, type ReadField } from "./dataRows";
+import type { Field } from "./report";
 
-const props = defineProps<{ documentPath?: string; active?: boolean }>();
-const emit = defineEmits<{ pickDocument: [] }>();
+const props = defineProps<{
+  documentPath?: string;
+  active?: boolean;
+  datasets?: { id: string; name: string; fields: Field[] }[];
+}>();
+const emit = defineEmits<{
+  pickDocument: [];
+  replaceFields: [id: string, fields: ReadField[]];
+  changeField: [id: string, index: number, patch: { name?: string; className?: string; jsonPath?: string | null }];
+  addField: [id: string];
+  removeField: [id: string, index: number];
+}>();
 
 const document = ref<unknown>(null);
 const error = ref("");
 const path = ref("");
 const loadedPath = ref("");
+const datasetId = ref("report");
+const readMessage = ref("");
 
+const datasets = computed(() => props.datasets ?? []);
+const current = computed(() => datasets.value.find((item) => item.id === datasetId.value) ?? null);
 const table = computed(() => (document.value === null ? null : previewTable(document.value, path.value)));
 
 const summary = computed(() => {
@@ -62,6 +77,35 @@ async function load(): Promise<void> {
     error.value = err instanceof SyntaxError ? "The file is not JSON." : err instanceof Error ? err.message : String(err);
   }
 }
+
+watch(
+  datasets,
+  (list) => {
+    if (!list.some((item) => item.id === datasetId.value)) {
+      datasetId.value = list[0]?.id ?? "report";
+    }
+  },
+  { immediate: true },
+);
+
+function onReadFields(): void {
+  readMessage.value = "";
+  if (document.value === null || !current.value) {
+    return;
+  }
+  const found = readFields(document.value, path.value);
+  if (!found) {
+    readMessage.value = "That path is not in this file.";
+    return;
+  }
+  emit("replaceFields", current.value.id, found);
+  if (found.length === 0) {
+    readMessage.value = "No fields were found at this path.";
+  }
+}
+
+const fieldInput =
+  "min-w-0 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-gray-100 outline-none focus:border-blue-500";
 
 function fileName(file: string): string {
   const index = Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\"));
@@ -131,5 +175,77 @@ function fileName(file: string): string {
         </table>
       </div>
     </div>
+
+    <section class="flex h-52 shrink-0 flex-col border-t border-slate-800 bg-slate-900">
+      <div class="flex h-10 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
+        <span class="text-xs font-medium text-gray-200">Fields</span>
+        <select
+          v-if="datasets.length > 1"
+          v-model="datasetId"
+          class="max-w-48 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-gray-100 outline-none"
+        >
+          <option v-for="item in datasets" :key="item.id" :value="item.id">{{ item.name }}</option>
+        </select>
+        <span v-else-if="current" class="truncate text-xs text-gray-400">{{ current.name }}</span>
+        <FwbButton size="xs" :disabled="document === null || !current" @click="onReadFields">Read Fields</FwbButton>
+        <FwbButton size="xs" color="alternative" :disabled="!current" @click="current && emit('addField', current.id)">
+          Add field
+        </FwbButton>
+        <span v-if="readMessage" class="truncate text-xs text-amber-400">{{ readMessage }}</span>
+      </div>
+      <div class="min-h-0 flex-1 overflow-auto">
+        <p v-if="!current" class="p-3 text-xs text-gray-500">Open a report to edit its fields.</p>
+        <p v-else-if="current.fields.length === 0" class="p-3 text-xs text-gray-500">
+          This dataset has no fields. Read Fields uses the columns at the data path.
+        </p>
+        <table v-else class="w-full border-collapse text-left text-xs">
+          <thead class="sticky top-0 bg-slate-900">
+            <tr>
+              <th class="border-b border-slate-700 px-2 py-1.5 font-medium text-gray-400">Name</th>
+              <th class="border-b border-slate-700 px-2 py-1.5 font-medium text-gray-400">Class</th>
+              <th class="border-b border-slate-700 px-2 py-1.5 font-medium text-gray-400">JSON path</th>
+              <th class="border-b border-slate-700 px-2 py-1.5"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(field, index) in current.fields" :key="`${current.id}-${index}`">
+              <td class="border-b border-slate-800 px-2 py-1">
+                <input
+                  :class="fieldInput"
+                  :value="field.name"
+                  @change="current && emit('changeField', current.id, index, { name: ($event.target as HTMLInputElement).value })"
+                />
+              </td>
+              <td class="border-b border-slate-800 px-2 py-1">
+                <select
+                  :class="fieldInput"
+                  :value="field.className"
+                  @change="current && emit('changeField', current.id, index, { className: ($event.target as HTMLSelectElement).value })"
+                >
+                  <option value="java.lang.String">String</option>
+                  <option value="java.lang.Integer">Integer</option>
+                  <option
+                    v-if="field.className !== 'java.lang.String' && field.className !== 'java.lang.Integer'"
+                    :value="field.className"
+                  >
+                    {{ field.className }}
+                  </option>
+                </select>
+              </td>
+              <td class="border-b border-slate-800 px-2 py-1">
+                <input
+                  :class="fieldInput"
+                  :value="field.jsonPath ?? ''"
+                  @change="current && emit('changeField', current.id, index, { jsonPath: ($event.target as HTMLInputElement).value || null })"
+                />
+              </td>
+              <td class="border-b border-slate-800 px-2 py-1 text-right">
+                <FwbButton size="xs" color="alternative" @click="current && emit('removeField', current.id, index)">Remove</FwbButton>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 </template>

@@ -23,11 +23,11 @@ Opening a Studio file and saving it is lossy. `write_report` emits the supported
 1. Open a `.jrxml` the engine already parses and show its bands and elements on the Design tab.
 2. Change page size, margins, static text, text fields, images, lines, rectangles, and a simple table.
 3. Save a `.jrxml` that `parse` accepts and that Preview renders without hand-written XML.
-4. Keep Design, Source, and Preview as views of one template, the way Studio’s editor tabs do. Dataset, beside File, is the JSON file, the data path, the tree, and the table.
+4. Keep Design, Source, and Preview as views of one template, the way Studio’s editor tabs do. Dataset, beside File, is the JSON file, the data path, the tree, and the table. Read Fields copies the columns at that path into the field list, which the Outline shows.
 
 ## Reference
 
-Studio’s report editor (6.20, Report Design) has three tabs: **Design**, **Source**, **Preview**. This app uses those three. **Dataset**, beside File, is the JSON file as a tree, and the chosen list as one row per object. Design is the tab this plan fills in.
+Studio’s report editor (6.20, Report Design) has three tabs: **Design**, **Source**, **Preview**. This app uses those three. **Dataset**, beside File, is the JSON file as a tree, and the chosen list as one row per object. **Read Fields** writes those columns into the field list for the report, or for one of its datasets. The Outline shows that same list. Design is the tab this plan fills in.
 
 On Design, Studio arranges the work like this:
 
