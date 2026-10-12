@@ -49,7 +49,7 @@ const designRef = ref<{
   isDirty: () => boolean;
   save: () => Promise<void>;
   saveAs: () => Promise<void>;
-  replaceFields: (id: string, fields: { name: string; className: string; jsonPath: string }[]) => void;
+  appendFields: (id: string, fields: { name: string; className: string; jsonPath: string }[]) => void;
   changeField: (
     id: string,
     index: number,
@@ -769,7 +769,7 @@ onBeforeUnmount(() => {
           :active="mode === 'data'"
           class="min-h-0 flex-1"
           @pick-document="chooseDocument(true)"
-          @replace-fields="(id, fields) => designRef?.replaceFields(id, fields)"
+          @append-fields="(id, fields) => designRef?.appendFields(id, fields)"
           @change-field="(id, index, patch) => designRef?.changeField(id, index, patch)"
           @add-field="(id) => designRef?.addField(id)"
           @remove-field="(id, index) => designRef?.removeField(id, index)"

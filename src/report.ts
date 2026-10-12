@@ -603,18 +603,33 @@ export function removeColumn(table: Extract<Element, { type: "table" }>, index: 
   syncTableBox(table);
 }
 
-/** Read Fields keeps a description already stored for the same name. */
+/** Read Fields adds names that are not already present. A repeated name is dropped. */
 export function fieldsFromDiscovery(
   previous: Field[],
   found: { name: string; className: string; jsonPath: string }[],
 ): Field[] {
-  const prior = new Map(previous.map((field) => [field.name, field]));
-  return found.map((item) => ({
-    name: item.name,
-    className: item.className,
-    description: prior.get(item.name)?.description ?? null,
-    jsonPath: item.jsonPath,
-  }));
+  const kept: Field[] = [];
+  const names = new Set<string>();
+  for (const field of previous) {
+    if (names.has(field.name)) {
+      continue;
+    }
+    names.add(field.name);
+    kept.push(field);
+  }
+  for (const item of found) {
+    if (!item.name || names.has(item.name)) {
+      continue;
+    }
+    names.add(item.name);
+    kept.push({
+      name: item.name,
+      className: item.className,
+      description: null,
+      jsonPath: item.jsonPath,
+    });
+  }
+  return kept;
 }
 
 export function addMainField(report: Report): number {

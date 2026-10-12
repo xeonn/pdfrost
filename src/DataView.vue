@@ -13,7 +13,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   pickDocument: [];
-  replaceFields: [id: string, fields: ReadField[]];
+  appendFields: [id: string, fields: ReadField[]];
   changeField: [id: string, index: number, patch: { name?: string; className?: string; jsonPath?: string | null }];
   addField: [id: string];
   removeField: [id: string, index: number];
@@ -98,7 +98,7 @@ function onReadFields(): void {
     readMessage.value = "That path is not in this file.";
     return;
   }
-  emit("replaceFields", current.value.id, found);
+  emit("appendFields", current.value.id, found);
   if (found.length === 0) {
     readMessage.value = "No fields were found at this path.";
   }
@@ -196,7 +196,7 @@ function fileName(file: string): string {
       <div class="min-h-0 flex-1 overflow-auto">
         <p v-if="!current" class="p-3 text-xs text-gray-500">Open a report to edit its fields.</p>
         <p v-else-if="current.fields.length === 0" class="p-3 text-xs text-gray-500">
-          This dataset has no fields. Read Fields uses the columns at the data path.
+          This dataset has no fields. Read Fields adds the columns at the data path.
         </p>
         <table v-else class="w-full border-collapse text-left text-xs">
           <thead class="sticky top-0 bg-slate-900">

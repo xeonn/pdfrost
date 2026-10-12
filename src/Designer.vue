@@ -1838,7 +1838,7 @@ function fieldsFor(id: string): Field[] | null {
   return report.value.subdatasets[index]?.fields ?? null;
 }
 
-function replaceFields(id: string, found: { name: string; className: string; jsonPath: string }[]): void {
+function appendFields(id: string, found: { name: string; className: string; jsonPath: string }[]): void {
   edit(() => {
     const list = fieldsFor(id);
     if (!list) {
@@ -1847,10 +1847,15 @@ function replaceFields(id: string, found: { name: string; className: string; jso
     const next = fieldsFromDiscovery(list, found);
     list.splice(0, list.length, ...next);
     const current = selection.value;
-    if (id === "report" && (current.kind === "field" || current.kind === "fields")) {
+    if (id === "report" && current.kind === "field" && current.index >= list.length) {
       selection.value = { kind: "fields" };
     }
-    if (id !== "report" && current.kind === "datasetField" && String(current.dataset) === id) {
+    if (
+      id !== "report" &&
+      current.kind === "datasetField" &&
+      String(current.dataset) === id &&
+      current.index >= list.length
+    ) {
       selection.value = { kind: "dataset", index: current.dataset };
     }
   });
@@ -1940,7 +1945,7 @@ defineExpose({
   isDirty,
   save: () => saveDesign(false),
   saveAs: () => saveDesign(true),
-  replaceFields,
+  appendFields,
   changeField,
   addField,
   removeField,
