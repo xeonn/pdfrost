@@ -36,6 +36,9 @@ const saving = ref(false);
 const editorReady = ref(false);
 let view: EditorView | null = null;
 let latestIssues: ConsoleIssue[] = [];
+let diskTicket = 0;
+let displayTicket = 0;
+let pushedText = "";
 
 const dirty = computed(() => source.value !== savedSource.value);
 const canSave = computed(
@@ -44,7 +47,7 @@ const canSave = computed(
 
 function confirmDiscardIfDirty(messageText = "Discard unsaved Source changes?"): boolean {
   syncFromView();
-  if (!dirty.value) {
+  if (!isHandEdited()) {
     return true;
   }
   return window.confirm(messageText);
@@ -88,6 +91,26 @@ function contents(): string {
   return source.value;
 }
 
+function isHandEdited(): boolean {
+  syncFromView();
+  if (pushedText) {
+    return source.value !== pushedText;
+  }
+  return source.value !== savedSource.value;
+}
+
+function hasDesignPreview(): boolean {
+  return pushedText !== "";
+}
+
+function showReport(text: string): void {
+  displayTicket += 1;
+  pushedText = text;
+  error.value = "";
+  status.value = "";
+  applyToEditor(text);
+}
+
 async function reloadFromDisk(): Promise<void> {
   await load();
 }
@@ -97,6 +120,9 @@ defineExpose({
   dirty,
   jumpTo,
   isDirty,
+  isHandEdited,
+  hasDesignPreview,
+  showReport,
   contents,
   reloadFromDisk,
   discardChanges: reloadFromDisk,
@@ -122,6 +148,21 @@ function setEditorText(text: string): void {
   view.dispatch({
     changes: { from: 0, to: view.state.doc.length, insert: text },
   });
+}
+
+function applyToEditor(text: string): void {
+  if (!view) {
+    source.value = text;
+    if (hostEl.value) {
+      createEditor(text);
+    }
+    return;
+  }
+  if (view.state.doc.toString() !== text) {
+    setEditorText(text);
+  }
+  source.value = text;
+  void runValidate(text);
 }
 
 function destroyEditor(): void {
@@ -292,13 +333,15 @@ function createEditor(text: string): void {
     }),
   });
   source.value = text;
-  savedSource.value = text;
   editorReady.value = true;
   void runValidate(text);
 }
 
 async function load(): Promise<void> {
   if (!props.templatePath) {
+    diskTicket += 1;
+    displayTicket += 1;
+    pushedText = "";
     source.value = "";
     savedSource.value = "";
     error.value = "";
@@ -307,25 +350,33 @@ async function load(): Promise<void> {
     destroyEditor();
     return;
   }
+  const ticket = ++diskTicket;
+  const display = displayTicket;
   loading.value = true;
   error.value = "";
   status.value = "";
   try {
     const text = await invoke<string>("read_template", { path: props.templatePath });
     await nextTick();
-    if (view) {
-      setEditorText(text);
-      source.value = text;
-      savedSource.value = text;
-      void runValidate(text);
-    } else {
-      createEditor(text);
+    if (ticket !== diskTicket) {
+      return;
+    }
+    savedSource.value = text;
+    if (display === displayTicket) {
+      pushedText = "";
+      applyToEditor(text);
     }
     view?.requestMeasure();
   } catch (err) {
+    if (ticket !== diskTicket) {
+      return;
+    }
+    error.value = message(err);
+    if (display !== displayTicket) {
+      return;
+    }
     source.value = "";
     savedSource.value = "";
-    error.value = message(err);
     publishIssues([
       {
         id: `load:${message(err)}`,
@@ -336,7 +387,9 @@ async function load(): Promise<void> {
     ]);
     destroyEditor();
   } finally {
-    loading.value = false;
+    if (ticket === diskTicket) {
+      loading.value = false;
+    }
   }
 }
 
@@ -360,6 +413,7 @@ async function save(): Promise<void> {
       contents: source.value,
     });
     savedSource.value = source.value;
+    pushedText = source.value;
     status.value = "Saved";
     emit("saved", props.templatePath);
   } catch (err) {
@@ -393,6 +447,7 @@ async function saveAs(): Promise<void> {
   try {
     await invoke("write_template", { path, contents: source.value });
     savedSource.value = source.value;
+    pushedText = source.value;
     status.value = "Saved";
     emit("saved", path);
   } catch (err) {
@@ -403,7 +458,8 @@ async function saveAs(): Promise<void> {
 }
 
 async function reload(): Promise<void> {
-  if (!confirmDiscardIfDirty("Discard unsaved changes and reload from disk?")) {
+  syncFromView();
+  if (source.value !== savedSource.value && !window.confirm("Discard unsaved changes and reload from disk?")) {
     return;
   }
   await load();

@@ -42,6 +42,9 @@ const sourceRef = ref<{
   discardChanges: () => Promise<void>;
   reloadFromDisk: () => Promise<void>;
   contents: () => string;
+  isHandEdited: () => boolean;
+  hasDesignPreview: () => boolean;
+  showReport: (text: string) => void;
   save: () => Promise<void>;
   saveAs: () => Promise<void>;
 } | null>(null);
@@ -283,6 +286,36 @@ async function render(): Promise<void> {
   }
 }
 
+async function showDesignInSource(): Promise<boolean> {
+  if (!sourceRef.value) {
+    return true;
+  }
+  if (designRef.value?.isDirty()) {
+    const report = designRef.value.currentReport();
+    if (!report) {
+      return true;
+    }
+    if (
+      sourceRef.value.isHandEdited() &&
+      !window.confirm("Replace Source with the report from Design?")
+    ) {
+      return false;
+    }
+    try {
+      const xml = await invoke<string>("report_xml", { report });
+      sourceRef.value.showReport(xml);
+    } catch (err) {
+      error.value = message(err);
+      return false;
+    }
+    return true;
+  }
+  if (sourceRef.value.hasDesignPreview() && !sourceRef.value.isHandEdited()) {
+    await sourceRef.value.reloadFromDisk();
+  }
+  return true;
+}
+
 async function selectMode(next: Mode): Promise<void> {
   if (next === mode.value) {
     return;
@@ -294,24 +327,17 @@ async function selectMode(next: Mode): Promise<void> {
     draftEditor.value = "design";
   }
   const editing = mode.value === "preview" ? draftEditor.value : mode.value;
-  if (next !== "preview" && editing === "source" && next !== "source" && sourceRef.value) {
+  if (next !== "preview" && editing === "source" && next !== "source" && sourceRef.value?.isHandEdited()) {
     if (!sourceRef.value.confirmDiscardIfDirty("Discard unsaved Source changes?")) {
       return;
     }
-    if (sourceRef.value.isDirty()) {
-      await sourceRef.value.discardChanges();
-    }
+    await sourceRef.value.discardChanges();
   }
-  if (next !== "preview" && editing === "design" && next === "source" && designRef.value) {
-    if (!designRef.value.confirmDiscardIfDirty("Discard unsaved Design changes?")) {
-      return;
-    }
-    if (designRef.value.isDirty()) {
-      designRef.value.discardChanges();
-    }
+  if (next === "source" && !(await showDesignInSource())) {
+    return;
   }
   mode.value = next;
-  if (next === "preview" && documentPath.value) {
+  if (next === "preview") {
     await render();
   }
 }
@@ -353,9 +379,7 @@ function onSourceSaved(path?: string): void {
   if (path && path !== templatePath.value) {
     templatePath.value = path;
   }
-  if (documentPath.value) {
-    void render();
-  }
+  void render();
 }
 
 async function onDesignSaved(path: string): Promise<void> {
@@ -364,9 +388,7 @@ async function onDesignSaved(path: string): Promise<void> {
   if (!changed) {
     await sourceRef.value?.reloadFromDisk();
   }
-  if (documentPath.value) {
-    await render();
-  }
+  await render();
 }
 
 function clearPreview(): void {
@@ -689,7 +711,7 @@ onBeforeUnmount(() => {
 
       <template v-else>
         <div
-          v-show="mode === 'preview' && documentPath"
+          v-show="mode === 'preview'"
           class="flex h-10 shrink-0 items-center justify-center gap-2 border-b border-slate-800 bg-slate-900 px-3"
           :class="{ 'opacity-40': !loaded }"
         >
@@ -845,16 +867,7 @@ onBeforeUnmount(() => {
           class="flex min-h-0 flex-1 flex-col"
         >
           <div
-            v-if="!documentPath"
-            class="flex flex-1 flex-col items-center justify-center gap-3 bg-slate-950 px-6"
-          >
-            <FwbP class="text-center text-gray-400">
-              Choose a JSON file in Dataset. Preview uses that file.
-            </FwbP>
-            <FwbButton @click="selectMode('data')">Dataset</FwbButton>
-          </div>
-          <div
-            v-else-if="error && !hasDocument"
+            v-if="error && !hasDocument"
             class="flex flex-1 items-center justify-center bg-slate-950 p-6"
           >
             <FwbAlert type="danger" class="max-w-xl">{{ error }}</FwbAlert>
