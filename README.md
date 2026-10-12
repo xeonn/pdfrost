@@ -97,10 +97,10 @@ fn main() {
 ## Go
 
 ```bash
-go get github.com/xeonn/pdfrost/go@v0.1.0
+go get github.com/xeonn/pdfrost/go@v0.2.0
 ```
 
-The module is the `go/` directory, so the Git tag is `go/v0.1.0`. That tag is version `v0.1.0` of `github.com/xeonn/pdfrost/go`. The download includes a ready-made copy of the engine. Building the Go program does not require Rust.
+The module is the `go/` directory, so the Git tag is `go/v0.2.0`. That tag is version `v0.2.0` of `github.com/xeonn/pdfrost/go`. The download includes a ready-made copy of the engine. Building the Go program does not require Rust.
 
 ```go
 import (
@@ -124,7 +124,7 @@ func main() {
 }
 ```
 
-`document` must be one JSON object, the same rule as the Rust call. Details, the small web sample, and when the packaged engine is refreshed are in [go/README.md](go/README.md).
+`document` is one JSON value, the same rule as the Rust `render` call. An object is one record. An array is one record per element. The Rust library can also stream a root array with `render_read`. Details, the small web sample, and when the packaged engine is refreshed are in [go/README.md](go/README.md).
 
 ## Examples in this repository
 
@@ -155,7 +155,7 @@ bun install
 bun run tauri dev
 ```
 
-`bun run tauri build` makes an installable app. File → Open Report starts on Design, where you edit the report. Dataset, beside File, is where you choose the JSON file. Preview shows the PDF from that file. The values do not come from a database.
+`bun run tauri build` makes an installable app. File → Open Report starts on Design, where you edit the report. Dataset, beside File, is where you choose the JSON file. Preview shows the PDF. With no JSON file it fills one empty record. The values do not come from a database.
 
 ## Repository
 
@@ -169,3 +169,4 @@ bun run tauri dev
 | `src-tauri/`, `src/` | The desktop app. |
 | `jrxmls/` | Sample templates and the JSON files that fill them. |
 | `docs/` | Notes on what is supported and how the app is built. |
+| `CHANGELOG.md` | Release notes. 0.2.0 is the changes since `go/v0.1.0`. |

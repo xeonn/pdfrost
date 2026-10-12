@@ -18,5 +18,6 @@ Read them in this order:
 | [Designer](designer.md) | The Design screen: the page, the outline, the tool palette, the properties, and saving. |
 | [Viewer and designer](viewer-and-designer.md) | A short note on how Preview and Design share one window. |
 | [Milestones](milestones.md) | The order the work was delivered, checked against the files in `jrxmls/`. |
+| [Release notes](../CHANGELOG.md) | What changed in each version, starting at 0.2.0. |
 
 JasperReports 6.20.1 is the guide for how a supported piece should behave. That project is not copied into this repository. See [System overview](system-overview.md#reference-project).

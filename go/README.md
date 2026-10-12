@@ -1,6 +1,6 @@
 # github.com/xeonn/pdfrost/go
 
-This is the Go package for pdfrost. Pass it a report template and one JSON object, and it returns a PDF.
+This is the Go package for pdfrost. Pass it a report template and one JSON value, and it returns a PDF.
 
 The JSON object is the data. pdfrost does not open a database connection, and one is not planned. A text field reads one value from the object. A table or a chart can walk a list inside it. The work of reading the template and laying out the page stays in the Rust engine. This package carries a ready-made copy of that engine and runs it with [wazero](https://github.com/tetratelabs/wazero).
 
@@ -8,14 +8,14 @@ Use it from a Go service that needs to print a receipt, an invoice, or a stateme
 
 ## Install
 
-The module is this directory. A release is the Git tag `go/v0.1.0`, which `go get` sees as version `v0.1.0`:
+The module is this directory. A release is the Git tag `go/v0.2.0`, which `go get` sees as version `v0.2.0`:
 
 ```bash
-go get github.com/xeonn/pdfrost/go@v0.1.0
+go get github.com/xeonn/pdfrost/go@v0.2.0
 ```
 
 ```go
-require github.com/xeonn/pdfrost/go v0.1.0
+require github.com/xeonn/pdfrost/go v0.2.0
 ```
 
 In a checkout of this repository, point a `replace` at `go/` instead of fetching a tag:
@@ -67,7 +67,7 @@ func main() {
 | Argument | Meaning |
 | --- | --- |
 | template | The text of the `.jrxml` file. |
-| document | One JSON object. This is the data. `$F{CompanyName}` prints `Northwind Traders`. A table aimed at `itemsList` prints one row for A-1. |
+| document | One JSON value. An object is one record. An array is one record per element. `$F{CompanyName}` prints `Northwind Traders`. A table aimed at `itemsList` prints one row for A-1. |
 | `time.Now().UTC()` | The date and time printed when the template asks for the current time. It is shown in UTC, for example `2026-10-12 00:00:00`. |
 
 `result.PDF` is the file. `result.Warnings` lists anything the template asked for that was skipped, including a missing value. A warning does not cancel the PDF. `err` is set when `document` is not JSON, or when the template cannot be read. There is no PDF in that case.
@@ -100,7 +100,7 @@ cd go && go test ./...
 
 The test fills `jrxmls/Sample.jrxml` through the packaged engine. The charts use the `chartPoints` list in the sample data, so that run does not warn about a chart.
 
-`go/engine.wasm` is that packaged engine. It is replaced only when a release of this Go package is being prepared. Day-to-day engine changes do not refresh it. This packaged copy fills one JSON object. The Rust library and the desktop app also accept a list of objects and read it one object at a time. That list reaches this package when the packaged engine is replaced for a release. When a release is being prepared, rebuild the file and commit it with the tag:
+`go/engine.wasm` is that packaged engine. It is replaced only when a release of this Go package is being prepared. Day-to-day engine changes do not refresh it. This copy accepts one JSON value: an object is one record, and an array is one record per element, held in memory. The Rust library's `render_read` still streams a root array one element at a time. When a release is being prepared, rebuild the file and commit it with the tag:
 
 ```bash
 rustup target add wasm32-unknown-unknown
