@@ -620,7 +620,7 @@ export function datasetListPath(report: Report, datasetName: string): string | n
   return null;
 }
 
-/** Read Fields adds names that are not already present. A repeated name keeps its class. An absolute JSON path replaces a short one. */
+/** Read Fields adds names that are not already present. A repeated name keeps its class. A `(root)` path becomes the expression relative to the query. */
 export function fieldsFromDiscovery(
   previous: Field[],
   found: { name: string; className: string; jsonPath: string }[],
@@ -640,7 +640,7 @@ export function fieldsFromDiscovery(
     }
     const existing = kept.find((field) => field.name === item.name);
     if (existing) {
-      if (item.jsonPath.startsWith("(root)")) {
+      if (existing.jsonPath?.startsWith("(root)")) {
         existing.jsonPath = item.jsonPath;
       }
       continue;
@@ -649,11 +649,47 @@ export function fieldsFromDiscovery(
     kept.push({
       name: item.name,
       className: item.className,
-      description: null,
+      description: item.name,
       jsonPath: item.jsonPath,
     });
   }
   return kept;
+}
+
+/** Studio stores the field expression relative to the query, as in `Address` beside `Northwind.Customers`. */
+export function relativeExpression(jsonPath: string | null, recordPath: string | null): string | null {
+  if (!jsonPath) {
+    return jsonPath;
+  }
+  let rest = jsonPath.trim();
+  if (rest.startsWith("(root)")) {
+    rest = rest.slice("(root)".length).replace(/^\./, "");
+  }
+  const record = (recordPath ?? "").trim();
+  if (record && record !== ".") {
+    const compact = record
+      .split(".")
+      .map((part) => part.trim())
+      .filter((part) => part && !/^\d+$/.test(part))
+      .join(".");
+    const prefix = `${compact}.`;
+    if (compact && rest.startsWith(prefix)) {
+      return rest.slice(prefix.length);
+    }
+  }
+  return rest || null;
+}
+
+export function applyStudioExpressions(report: Report): void {
+  for (const field of report.fields) {
+    field.jsonPath = relativeExpression(field.jsonPath, report.query);
+  }
+  for (const dataset of report.subdatasets) {
+    const list = datasetListPath(report, dataset.name);
+    for (const field of dataset.fields) {
+      field.jsonPath = relativeExpression(field.jsonPath, list);
+    }
+  }
 }
 
 export function addMainField(report: Report): number {

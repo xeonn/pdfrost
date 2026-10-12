@@ -37,22 +37,22 @@ describe("previewTable", () => {
 
   test("read fields keeps primitive columns and the integer class", () => {
     expect(readFields(receipts, ".")).toEqual([
-      { name: "receiptNo", className: "java.lang.String", jsonPath: "(root).receiptNo" },
-      { name: "customer", className: "java.lang.String", jsonPath: "(root).customer" },
-      { name: "amount", className: "java.lang.Integer", jsonPath: "(root).amount" },
-      { name: "note", className: "java.lang.String", jsonPath: "(root).note" },
+      { name: "receiptNo", className: "java.lang.String", jsonPath: "receiptNo" },
+      { name: "customer", className: "java.lang.String", jsonPath: "customer" },
+      { name: "amount", className: "java.lang.Integer", jsonPath: "amount" },
+      { name: "note", className: "java.lang.String", jsonPath: "note" },
     ]);
     expect(readFields(orders, "")).toEqual([
-      { name: "company", className: "java.lang.String", jsonPath: "(root).company" },
-      { name: "contact", className: "java.lang.String", jsonPath: "(root).contact" },
+      { name: "company", className: "java.lang.String", jsonPath: "company" },
+      { name: "contact", className: "java.lang.String", jsonPath: "contact" },
     ]);
     expect(readFields(orders, "orders.0.lines")).toEqual([
-      { name: "sku", className: "java.lang.String", jsonPath: "(root).orders.lines.sku" },
-      { name: "qty", className: "java.lang.Integer", jsonPath: "(root).orders.lines.qty" },
+      { name: "sku", className: "java.lang.String", jsonPath: "sku" },
+      { name: "qty", className: "java.lang.Integer", jsonPath: "qty" },
     ]);
     expect(readFields(JSON.parse(readFileSync("jrxmls/SampleData.json", "utf8")) as unknown, "Northwind.Customers")).toEqual(
       expect.arrayContaining([
-        { name: "Address", className: "java.lang.String", jsonPath: "(root).Northwind.Customers.Address" },
+        { name: "Address", className: "java.lang.String", jsonPath: "Address" },
       ]),
     );
     expect(readFields(orders, "missing")).toBeNull();
@@ -75,8 +75,8 @@ describe("previewTable", () => {
         "",
       ),
     ).toEqual([
-      { name: "docno", className: "java.lang.String", jsonPath: "(root).docno" },
-      { name: "audit_created", className: "java.lang.String", jsonPath: "(root).audit.created" },
+      { name: "docno", className: "java.lang.String", jsonPath: "docno" },
+      { name: "audit_created", className: "java.lang.String", jsonPath: "audit.created" },
     ]);
   });
 

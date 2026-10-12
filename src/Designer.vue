@@ -29,6 +29,7 @@ import {
   expressionChoices,
   datasetListPath,
   fieldsFromDiscovery,
+  applyStudioExpressions,
   hexColor,
   nudge,
   orderedSections,
@@ -652,6 +653,7 @@ async function load(): Promise<void> {
       return;
     }
     syncColumn(loaded);
+    applyStudioExpressions(loaded);
     report.value = loaded;
     savedSnapshot.value = JSON.stringify(loaded);
     loadWarnings.value = loaded.warnings.map((warning) => ({ ...warning }));

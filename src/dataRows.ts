@@ -139,28 +139,10 @@ export function readFields(root: unknown, path: string): ReadField[] | null {
     fields.push({
       name: fieldName(jsonPath, fields.map((field) => field.name)),
       className: integerValues(values) ? "java.lang.Integer" : "java.lang.String",
-      jsonPath: studioFieldPath(path, jsonPath),
+      jsonPath,
     });
   }
   return fields;
-}
-
-/** Studio's JSON field expression. `(root)` is the document. Array indexes are omitted. */
-export function studioFieldPath(recordPath: string, relative: string): string {
-  const base = recordPath
-    .split(".")
-    .map((part) => part.trim())
-    .filter((part) => part && part !== "." && !/^\d+$/.test(part))
-    .join(".");
-  const tail = relative
-    .split(".")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0)
-    .join(".");
-  if (!base) {
-    return tail ? `(root).${tail}` : "(root)";
-  }
-  return tail ? `(root).${base}.${tail}` : `(root).${base}`;
 }
 
 /**

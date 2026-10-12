@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { blankReport, datasetListPath, fieldsFromDiscovery, type Field } from "./report";
+import { blankReport, datasetListPath, fieldsFromDiscovery, relativeExpression, type Field } from "./report";
 
 function field(name: string, description: string | null = null): Field {
   return { name, className: "java.lang.String", description, jsonPath: name };
@@ -15,11 +15,15 @@ describe("fieldsFromDiscovery", () => {
     expect(next.map((item) => item.name)).toEqual(["customer", "note", "amount"]);
     expect(next[0]).toBe(previous[0]);
     expect(next[2]?.className).toBe("java.lang.Integer");
+    expect(next[2]?.description).toBe("amount");
+    previous[0].jsonPath = "(root).Northwind.Customers.customer";
     const refreshed = fieldsFromDiscovery(previous, [
-      { name: "customer", className: "java.lang.String", jsonPath: "(root).Northwind.Customers.customer" },
+      { name: "customer", className: "java.lang.String", jsonPath: "customer" },
     ]);
-    expect(refreshed[0]?.jsonPath).toBe("(root).Northwind.Customers.customer");
+    expect(refreshed[0]?.jsonPath).toBe("customer");
     expect(refreshed[0]?.description).toBe("buyer");
+    expect(relativeExpression("(root).Northwind.Customers.Address", "Northwind.Customers")).toBe("Address");
+    expect(relativeExpression("product.id", "itemsList")).toBe("product.id");
   });
 
   test("drops a repeated name and leaves every other field", () => {

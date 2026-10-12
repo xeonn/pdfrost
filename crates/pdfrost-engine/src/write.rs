@@ -26,7 +26,7 @@ pub fn write_report(report: &Report) -> String {
         write_style(&mut xml, style);
     }
     for dataset in &report.subdatasets {
-        write_subdataset(&mut xml, dataset);
+        write_subdataset(&mut xml, report, dataset);
     }
     if let Some(query) = &report.query {
         let _ = writeln!(
@@ -36,7 +36,7 @@ pub fn write_report(report: &Report) -> String {
         );
     }
     for field in &report.fields {
-        write_field(&mut xml, field, 1);
+        write_field(&mut xml, field, 1, report.query.as_deref());
     }
     for band in &report.bands {
         write_band(&mut xml, band);
@@ -64,15 +64,16 @@ fn write_style(xml: &mut String, style: &Style) {
     xml.push_str("\t</style>\n");
 }
 
-fn write_subdataset(xml: &mut String, dataset: &SubDataset) {
+fn write_subdataset(xml: &mut String, report: &Report, dataset: &SubDataset) {
     let _ = writeln!(xml, "\t<subDataset name=\"{}\">", escape(&dataset.name));
+    let source = dataset_source(report, &dataset.name);
     for field in &dataset.fields {
-        write_field(xml, field, 2);
+        write_field(xml, field, 2, source);
     }
     xml.push_str("\t</subDataset>\n");
 }
 
-fn write_field(xml: &mut String, field: &Field, indent: usize) {
+fn write_field(xml: &mut String, field: &Field, indent: usize, record_path: Option<&str>) {
     let pad = "\t".repeat(indent);
     let _ = writeln!(
         xml,
@@ -80,11 +81,12 @@ fn write_field(xml: &mut String, field: &Field, indent: usize) {
         escape(&field.name),
         escape(&field.class_name)
     );
-    if let Some(path) = &field.json_path {
+    if let Some(path) = field.json_path.as_deref() {
+        let expression = relative_expression(path, record_path);
         let _ = writeln!(
             xml,
             "{pad}\t<property name=\"net.sf.jasperreports.json.field.expression\" value=\"{}\"/>",
-            escape(path)
+            escape(&expression)
         );
     }
     if let Some(description) = &field.description {
@@ -95,6 +97,53 @@ fn write_field(xml: &mut String, field: &Field, indent: usize) {
         );
     }
     let _ = writeln!(xml, "{pad}</field>");
+}
+
+/// Studio's JSON field expression is relative to the query. `(root).Northwind.Customers.Address` is `Address`.
+fn relative_expression(path: &str, record_path: Option<&str>) -> String {
+    let mut rest = path.trim();
+    if let Some(after) = rest.strip_prefix("(root)") {
+        rest = after.trim_start_matches('.');
+    }
+    let Some(record) = record_path
+        .map(str::trim)
+        .filter(|record| !record.is_empty() && *record != ".")
+    else {
+        return rest.to_string();
+    };
+    let compact = record
+        .split('.')
+        .map(str::trim)
+        .filter(|part| !part.is_empty() && !part.bytes().all(|byte| byte.is_ascii_digit()))
+        .collect::<Vec<_>>()
+        .join(".");
+    let prefix = format!("{compact}.");
+    if !compact.is_empty() && rest.starts_with(&prefix) {
+        return rest[prefix.len()..].to_string();
+    }
+    rest.to_string()
+}
+
+fn dataset_source<'a>(report: &'a Report, name: &str) -> Option<&'a str> {
+    for band in &report.bands {
+        for element in &band.elements {
+            let (dataset, source) = match element {
+                Element::Table(table) => {
+                    (table.sub_dataset.as_deref(), table.data_source.as_deref())
+                }
+                Element::Chart(chart) => {
+                    (chart.sub_dataset.as_deref(), chart.data_source.as_deref())
+                }
+                _ => continue,
+            };
+            if dataset == Some(name) {
+                if let Some(source) = source.map(str::trim).filter(|source| !source.is_empty()) {
+                    return Some(source);
+                }
+            }
+        }
+    }
+    None
 }
 
 fn write_band(xml: &mut String, band: &Band) {

@@ -43,7 +43,7 @@ In the desktop app, opening a template starts on Design. From there you can:
 - Point a text field at a name in the JSON file
 - Repeat a table for each item in a list
 - Drop in another template as a subreport, then pick the list it should repeat from a view of the JSON file
-- Open Dataset and read the JSON file as a table. Click a list to show one row per object. Read Fields adds columns from the report query, or from the first list when the root has none, and stores that list as the query. A table or chart dataset reads the list named on that element. A nested object becomes a dotted path from the document root, such as `(root).itemsList.product.id`.
+- Open Dataset and read the JSON file as a table. Click a list to show one row per object. Read Fields adds columns from the report query, or from the first list when the root has none, and stores that list as the query. A table or chart dataset reads the list named on that element. A nested value stays on the record, such as `product.id`.
 - Switch to Preview and read the PDF
 
 A chart can be a bar, line, or area chart, including the stacked forms. A picture is a file on your computer. A long subreport continues on the next page.
