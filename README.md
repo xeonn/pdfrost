@@ -43,13 +43,14 @@ In the desktop app, opening a template starts on Design. From there you can:
 - Point a text field at a name in the JSON file
 - Repeat a table for each item in a list
 - Drop in another template as a subreport, then pick the list it should repeat from a view of the JSON file
+- Open Dataset and read the JSON file as a table. Click a list to show one row per object
 - Switch to Preview and read the PDF
 
 A chart can be a bar, line, or area chart, including the stacked forms. A picture is a file on your computer. A long subreport continues on the next page.
 
-To see this with the sample files, open `jrxmls/Subreport.jrxml`, then choose `jrxmls/SubreportData.json`. Preview is a two-page list of orders. Each order is drawn by `jrxmls/OrderLines.jrxml`, using the `orders` list in that JSON file.
+To see this with the sample files, use File → Open Report and open `jrxmls/Subreport.jrxml`. Then open Dataset and choose `jrxmls/SubreportData.json`. That screen shows the records. Preview is a two-page list of orders. Each order is drawn by `jrxmls/OrderLines.jrxml`, using the `orders` list in that JSON file.
 
-To print a list of receipts across two pages, open `jrxmls/Receipts.jrxml`, then choose `jrxmls/Receipts.json`. That file is a list. Each object is one receipt.
+To print a list of receipts across two pages, open `jrxmls/Receipts.jrxml`, then choose `jrxmls/Receipts.json` in Dataset. That file is a list. Each object is one receipt.
 
 | Way to use it | Where |
 | --- | --- |
@@ -154,7 +155,7 @@ bun install
 bun run tauri dev
 ```
 
-`bun run tauri build` makes an installable app. Opening a `.jrxml` file starts on Design, where you edit the report. Preview shows the PDF. The values in that PDF come from a JSON file you choose. They do not come from a database.
+`bun run tauri build` makes an installable app. File → Open Report starts on Design, where you edit the report. Dataset, beside File, is where you choose the JSON file. Preview shows the PDF from that file. The values do not come from a database.
 
 ## Repository
 

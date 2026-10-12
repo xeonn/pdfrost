@@ -56,7 +56,7 @@ import {
 } from "./report";
 
 const props = defineProps<{ templatePath: string; documentPath?: string; active?: boolean }>();
-const emit = defineEmits<{ saved: [path: string]; create: []; openTemplate: [path: string]; pickDocument: [] }>();
+const emit = defineEmits<{ saved: [path: string]; openTemplate: [path: string]; openDataset: [] }>();
 
 type Selection =
   | { kind: "report" }
@@ -1820,7 +1820,13 @@ function isDirty(): boolean {
   return dirty.value;
 }
 
-defineExpose({ confirmDiscardIfDirty, discardChanges, isDirty });
+defineExpose({
+  confirmDiscardIfDirty,
+  discardChanges,
+  isDirty,
+  save: () => saveDesign(false),
+  saveAs: () => saveDesign(true),
+});
 
 watch(
   () => props.templatePath,
@@ -1907,16 +1913,6 @@ onBeforeUnmount(() => {
 <template>
   <section class="flex h-full min-h-0 flex-col bg-slate-950 text-gray-100">
     <div class="flex shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-900 px-3 py-2">
-      <FwbButton size="xs" color="alternative" @click="emit('create')">New</FwbButton>
-      <FwbButton size="xs" :disabled="!dirty || saving || !report" @click="saveDesign(false)">
-        <span class="inline-flex items-center gap-1.5">
-          <Icon name="save" />
-          {{ saving ? "Saving…" : "Save" }}
-        </span>
-      </FwbButton>
-      <FwbButton size="xs" color="alternative" :disabled="!report || saving" @click="saveDesign(true)">
-        Save As
-      </FwbButton>
       <FwbButton size="xs" color="alternative" :disabled="undoStack.length === 0" @click="undo">
         Undo
       </FwbButton>
@@ -2852,12 +2848,14 @@ onBeforeUnmount(() => {
               </p>
               <FwbButton size="xs" color="alternative" @click="setSubreportSource('')">Use this object</FwbButton>
               <div class="space-y-2 rounded-md border border-slate-800 p-2">
-                <div class="flex items-center justify-between text-xs text-gray-400">
-                  JSON
-                  <FwbButton size="xs" color="alternative" @click="emit('pickDocument')">Open JSON</FwbButton>
-                </div>
+                <p class="text-xs text-gray-400">JSON file</p>
                 <p v-if="jsonError" class="text-xs text-amber-400">{{ jsonError }}</p>
-                <p v-else-if="jsonDocument === null" class="text-xs text-gray-500">Open a JSON document to pick an array or object.</p>
+                <p v-else-if="jsonDocument === null" class="text-xs text-gray-500">
+                  Choose a JSON file in Dataset.
+                  <button type="button" class="text-blue-400 hover:text-blue-300" @click="emit('openDataset')">
+                    Open Dataset
+                  </button>
+                </p>
                 <JsonTree
                   v-else
                   :value="jsonDocument"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { xml } from "@codemirror/lang-xml";
 import { bracketMatching, foldGutter, foldKeymap, indentOnInput } from "@codemirror/language";
@@ -21,7 +22,7 @@ import { formatXml } from "./xmlFormat";
 
 const props = defineProps<{ templatePath: string; active?: boolean }>();
 const emit = defineEmits<{
-  saved: [];
+  saved: [path: string];
   issues: [issues: ConsoleIssue[]];
 }>();
 
@@ -93,6 +94,8 @@ defineExpose({
   isDirty,
   reloadFromDisk,
   discardChanges: reloadFromDisk,
+  save,
+  saveAs,
 });
 
 function message(err: unknown): string {
@@ -352,7 +355,40 @@ async function save(): Promise<void> {
     });
     savedSource.value = source.value;
     status.value = "Saved";
-    emit("saved");
+    emit("saved", props.templatePath);
+  } catch (err) {
+    error.value = message(err);
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function saveAs(): Promise<void> {
+  if (!props.templatePath || saving.value) {
+    return;
+  }
+  syncFromView();
+  const diagnostics = await runValidate(source.value);
+  if (diagnostics.some((item) => item.severity === "error")) {
+    error.value = "Fix validation errors before saving.";
+    return;
+  }
+  const picked = await saveDialog({
+    filters: [{ name: "JRXML", extensions: ["jrxml"] }],
+    defaultPath: props.templatePath.split(/[/\\]/).pop() || "Report.jrxml",
+  });
+  if (typeof picked !== "string") {
+    return;
+  }
+  const path = picked.toLowerCase().endsWith(".jrxml") ? picked : `${picked}.jrxml`;
+  saving.value = true;
+  error.value = "";
+  status.value = "";
+  try {
+    await invoke("write_template", { path, contents: source.value });
+    savedSource.value = source.value;
+    status.value = "Saved";
+    emit("saved", path);
   } catch (err) {
     error.value = message(err);
   } finally {
@@ -442,12 +478,6 @@ watch(
     <div
       class="flex shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-900 px-3 py-2"
     >
-      <FwbButton size="xs" :disabled="!canSave" @click="save">
-        <span class="inline-flex items-center gap-1.5">
-          <Icon name="save" />
-          {{ saving ? "Saving…" : "Save" }}
-        </span>
-      </FwbButton>
       <FwbButton size="xs" color="alternative" :disabled="loading || saving" @click="reload">
         <span class="inline-flex items-center gap-1.5">
           <Icon name="refresh" />

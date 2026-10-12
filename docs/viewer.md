@@ -7,11 +7,10 @@ The engine already returns PDF bytes and warnings. This plan is the Flowbite she
 ## Goal
 
 1. Open a `.jrxml` file.
-2. Render it at once with an empty JSON object `{}`.
-3. Show the PDF like Studio Preview: gray stage, white page, page and zoom controls.
-4. List every warning. `Sample.jrxml` plots its charts when `chartPoints` is present, so that preview has no `chart` warning. Empty JSON still draws the frames and warns `chart`.
-5. Optionally choose a JSON document and render again with that data.
-6. After a template is loaded, switch between **Preview** and **Design**. Design is a placeholder until a later plan.
+2. Show the PDF like Studio Preview: gray stage, white page, page and zoom controls. Until a JSON file is chosen in Dataset, Preview asks for that file.
+3. List every warning. `Sample.jrxml` plots its charts when `chartPoints` is present, so that preview has no `chart` warning.
+4. Choose a JSON document in Dataset and render with that data.
+5. After a template is loaded, switch between **Preview** and **Design**. Design is a placeholder until a later plan.
 
 ## Reference
 
