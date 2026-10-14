@@ -8,14 +8,14 @@ Use it from a Go service that needs to print a receipt, an invoice, or a stateme
 
 ## Install
 
-The module is this directory. A release is the Git tag `go/v0.2.0`, which `go get` sees as version `v0.2.0`:
+The module is this directory. A release is the Git tag `go/v0.3.0`, which `go get` sees as version `v0.3.0`:
 
 ```bash
-go get github.com/xeonn/pdfrost/go@v0.2.0
+go get github.com/xeonn/pdfrost/go@v0.3.0
 ```
 
 ```go
-require github.com/xeonn/pdfrost/go v0.2.0
+require github.com/xeonn/pdfrost/go v0.3.0
 ```
 
 In a checkout of this repository, point a `replace` at `go/` instead of fetching a tag:

@@ -1,5 +1,30 @@
 # Release notes
 
+## 0.3.0
+
+Changes since `go/v0.2.0`. The desktop app, the Rust crates, and the Go module are all 0.3.0. The Go module tag is `go/v0.3.0`.
+
+### Images
+
+- A quoted string or `$F{name}` is still a path, raw base64, or a `data:` URI.
+- `new java.io.File(...)` and `new java.net.URL(...)` read the path or address inside the call. `http` and `https` stay unloaded.
+- `new java.io.ByteArrayInputStream(...)` around `Base64.getMimeDecoder().decode`, `Base64.getDecoder().decode`, `Base64.decodeBase64`, or `Base64Util.decode` draws the decoded PNG or JPEG. The argument is a quoted string or `$F{name}`, with an optional `.trim()` or `.getBytes()`. A `? null :` branch in front of the constructor is skipped.
+- Browsing for a PNG or JPEG stores the bytes on a `pdfrost.` property of that image and sets the expression to `$F{pdfrost.<name>}`. A string field of that name, with no JSON path, is added so Studio can compile. Studio keeps the property. The picture draws here and stays blank in Studio.
+- The expression class is String, File, or URL. Choosing File or URL wraps a quoted path or `$F{name}`. Choosing String unwraps that call. Typing one of those constructors sets that class.
+
+### Go package
+
+`go/engine.wasm` is rebuilt for this release. A file path still fails in that build. Base64, a data URI, a `pdfrost.` property, and the constructors above still draw.
+
+```bash
+go get github.com/xeonn/pdfrost/go@v0.3.0
+```
+
+### Desktop
+
+- Adding an image opens a file dialog for a PNG or JPEG.
+- The title bar shows the version, 0.3.0.
+
 ## 0.2.0
 
 Changes since `go/v0.1.0`. The desktop app, the Rust crates, and the Go module are all 0.2.0. The Go module tag is `go/v0.2.0`.

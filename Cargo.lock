@@ -2795,7 +2795,7 @@ dependencies = [
 
 [[package]]
 name = "pdfrost"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "pdfrost-engine",
@@ -2809,14 +2809,14 @@ dependencies = [
 
 [[package]]
 name = "pdfrost-charts"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "skrifa",
 ]
 
 [[package]]
 name = "pdfrost-engine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2833,7 +2833,7 @@ dependencies = [
 
 [[package]]
 name = "pdfrost-wasm"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "pdfrost-engine",
