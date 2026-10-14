@@ -445,12 +445,85 @@ export function imagePropertyName(fileName: string, used: string[]): string {
 }
 
 export function imagePictureName(expression: string, pictures: Record<string, string> | undefined): string | null {
-  const match = expression.trim().match(/^\$F\{([^}]+)\}$/);
-  const name = match?.[1];
-  if (!name || !pictures || !(name in pictures)) {
+  if (!pictures) {
     return null;
   }
-  return name;
+  const names = new Set(imageFieldNames(expression).filter((name) => name in pictures));
+  return names.size === 1 ? [...names][0] : null;
+}
+
+function imageFieldNames(expression: string): string[] {
+  return [...expression.matchAll(/\$F\{([^}]+)\}/g)].map((match) => match[1]);
+}
+
+function locationArgument(expression: string): string | null {
+  const trimmed = expression.trim();
+  for (const prefix of ["new java.io.File(", "new java.net.URL("]) {
+    if (!trimmed.startsWith(prefix) || !trimmed.endsWith(")")) {
+      continue;
+    }
+    const inner = trimmed.slice(prefix.length, -1).trim();
+    if (isLocationArgument(inner)) {
+      return inner;
+    }
+  }
+  return null;
+}
+
+function isLocationArgument(value: string): boolean {
+  return (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) || /^\$F\{[^}]+\}$/.test(value);
+}
+
+export function imageExpressionForClass(
+  expression: string,
+  className: string,
+): { expression: string; expressionClass: string | null } | null {
+  if (className !== "java.lang.String" && className !== "java.io.File" && className !== "java.net.URL") {
+    return { expression, expressionClass: className };
+  }
+  const argument = locationArgument(expression) ?? expression.trim();
+  if (className === "java.lang.String") {
+    if (!argument || isLocationArgument(argument)) {
+      return { expression: argument, expressionClass: null };
+    }
+    return null;
+  }
+  if (!isLocationArgument(argument)) {
+    return null;
+  }
+  const call = className === "java.io.File" ? "new java.io.File" : "new java.net.URL";
+  return { expression: `${call}(${argument})`, expressionClass: className };
+}
+
+export function imageClassForExpression(expression: string): string | null | undefined {
+  const trimmed = expression.trim();
+  if (!trimmed || isLocationArgument(trimmed)) {
+    return null;
+  }
+  if (trimmed.startsWith("new java.io.File(") && locationArgument(trimmed) !== null) {
+    return "java.io.File";
+  }
+  if (trimmed.startsWith("new java.net.URL(") && locationArgument(trimmed) !== null) {
+    return "java.net.URL";
+  }
+  return undefined;
+}
+
+export function retainedImagePictures(
+  expression: string,
+  pictures: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!pictures) {
+    return undefined;
+  }
+  const referenced = new Set(imageFieldNames(expression));
+  const next: Record<string, string> = {};
+  for (const [name, value] of Object.entries(pictures)) {
+    if (referenced.has(name)) {
+      next[name] = value;
+    }
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 export function chartExpression(value: string): string {

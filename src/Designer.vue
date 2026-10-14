@@ -30,8 +30,11 @@ import {
   IMAGE_EXPRESSION_CLASSES,
   imageExpressionClassNote,
   imageExpressionClassSupported,
+  imageClassForExpression,
+  imageExpressionForClass,
   imagePictureName,
   imagePropertyName,
+  retainedImagePictures,
   datasetListPath,
   fieldsFromDiscovery,
   applyStudioExpressions,
@@ -1152,9 +1155,10 @@ function storeImage(element: Extract<Element, { type: "image" }>, path: string, 
   if (!report.value) {
     return;
   }
+  const previous = Object.keys(element.pictures ?? {});
   const current = imagePictureName(element.expression, element.pictures);
   const name = current ?? imagePropertyName(path, usedImageNames(current));
-  element.pictures = { ...(element.pictures ?? {}), [name]: base64 };
+  element.pictures = { [name]: base64 };
   element.expression = `$F{${name}}`;
   element.expressionClass = null;
   if (!report.value.fields.some((field) => field.name === name)) {
@@ -1165,7 +1169,45 @@ function storeImage(element: Extract<Element, { type: "image" }>, path: string, 
       jsonPath: null,
     });
   }
+  for (const old of previous) {
+    if (old !== name) {
+      forgetImageField(old);
+    }
+  }
   error.value = "";
+}
+
+function forgetImageField(name: string): void {
+  if (!report.value || !name.startsWith("pdfrost.")) {
+    return;
+  }
+  const used = report.value.bands.some((band) => bandUsesImageField(band.elements, name));
+  if (used) {
+    return;
+  }
+  report.value.fields = report.value.fields.filter((field) => field.name !== name);
+}
+
+function bandUsesImageField(elements: Element[], name: string): boolean {
+  const token = `$F{${name}}`;
+  for (const element of elements) {
+    if ((element.type === "image" || element.type === "textField" || element.type === "subreport") && element.expression.includes(token)) {
+      return true;
+    }
+    if (element.type === "image" && element.pictures && name in element.pictures) {
+      return true;
+    }
+    if (element.type === "table") {
+      for (const column of element.columns) {
+        for (const section of column.sections) {
+          if (bandUsesImageField(section.elements, name)) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
 }
 
 async function browseImageAt(bandIndex: number, index: number): Promise<void> {
@@ -1554,6 +1596,15 @@ async function loadImagePreviews(): Promise<void> {
   }
 }
 
+function applyImageExpression(element: Extract<Element, { type: "image" }>, raw: string): void {
+  element.expression = commitImageExpression(raw);
+  const className = imageClassForExpression(element.expression);
+  if (className !== undefined) {
+    element.expressionClass = className;
+  }
+  releaseUnusedPictures(element);
+}
+
 function commitImageExpression(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed || trimmed.startsWith('"') || trimmed.startsWith("$") || trimmed.includes("(")) {
@@ -1562,8 +1613,28 @@ function commitImageExpression(raw: string): string {
   return `"${trimmed.replaceAll('"', "")}"`;
 }
 
-function commitImageExpressionClass(value: string): string | null {
-  return value === "java.lang.String" ? null : value;
+function commitImageExpressionClass(element: Extract<Element, { type: "image" }>, value: string, select: HTMLSelectElement): void {
+  const next = imageExpressionForClass(element.expression, value);
+  if (!next) {
+    select.value = element.expressionClass || "java.lang.String";
+    return;
+  }
+  const previous = element.expression;
+  element.expression = next.expression;
+  element.expressionClass = next.expressionClass;
+  if (next.expression !== previous) {
+    releaseUnusedPictures(element);
+  }
+}
+
+function releaseUnusedPictures(element: Extract<Element, { type: "image" }>): void {
+  const previous = Object.keys(element.pictures ?? {});
+  element.pictures = retainedImagePictures(element.expression, element.pictures);
+  for (const name of previous) {
+    if (!element.pictures || !(name in element.pictures)) {
+      forgetImageField(name);
+    }
+  }
 }
 
 function fillStyle(element: Element): Record<string, string> {
@@ -3143,7 +3214,7 @@ onBeforeUnmount(() => {
                   :class="inputClass"
                   :value="editedElement.expression"
                   placeholder='"logo.png" or $F{logo}'
-                  @change="edit(() => { if (editedElement?.type === 'image') editedElement.expression = commitImageExpression(($event.target as HTMLInputElement).value); })"
+                  @change="edit(() => { if (editedElement?.type === 'image') applyImageExpression(editedElement, ($event.target as HTMLInputElement).value); })"
                 />
               </label>
               <FwbButton size="xs" @click="browseSelectedImage">Browse</FwbButton>
@@ -3155,7 +3226,7 @@ onBeforeUnmount(() => {
                 <select
                   :class="inputClass"
                   :value="editedElement.expressionClass || 'java.lang.String'"
-                  @change="edit(() => { if (editedElement?.type === 'image') editedElement.expressionClass = commitImageExpressionClass(($event.target as HTMLSelectElement).value); })"
+                  @change="edit(() => { const select = $event.target as HTMLSelectElement; if (editedElement?.type === 'image') commitImageExpressionClass(editedElement, select.value, select); })"
                 >
                   <option
                     v-if="editedElement.expressionClass && !imageExpressionClassSupported(editedElement.expressionClass)"

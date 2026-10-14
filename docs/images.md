@@ -25,7 +25,7 @@ A build with no filesystem still draws steps 1 and 4. The Go package is that bui
 
 ## Expression class
 
-The designer writes one of three classes. An absent class is `java.lang.String`, and that name is left off the element. The picture is still read as a path or as base64 for every class. The properties note says which of those Studio draws.
+The designer writes one of three classes. An absent class is `java.lang.String`, and that name is left off the element. Choosing File or URL rewrites a quoted path or `$F{name}` into `new java.io.File(...)` or `new java.net.URL(...)`. Choosing String unwraps that call. Typing one of those constructors sets that class. Typing a quoted path or `$F{name}` sets String. An expression that is neither of those stays as written, and the class stays with it. The picture is still read as a path or as base64 once the call is reduced.
 
 | Class | Studio | This engine |
 | --- | --- | --- |
@@ -63,7 +63,7 @@ An `image` with no `imageExpression` has nothing to decode, so the box stays emp
 
 ## Embedded picture
 
-Browsing for a PNG or JPEG in the designer stores the bytes on the image and points the expression at that property. A field of the same name is added so Studio can compile `$F{name}`. The field has no JSON path. Studio keeps the property and draws the field when its value is a path. The base64 value stays blank in Studio.
+Browsing for a PNG or JPEG in the designer stores the bytes on the image and points the expression at that property. Browsing again replaces that property. A property the expression no longer names is dropped. A field of the same name is added so Studio can compile `$F{name}`. The field has no JSON path. Studio keeps the property and draws the field when its value is a path. The base64 value stays blank in Studio.
 
 ```xml
 <image>
