@@ -410,7 +410,7 @@ fn write_image(xml: &mut String, indent: usize, image: &Image) {
         let _ = write!(xml, " evaluationGroup=\"{}\"", escape(group));
     }
     xml.push_str(">\n");
-    write_report_element(xml, &image.element, indent + 1);
+    write_report_element_with(xml, &image.element, indent + 1, &image.pictures);
     if let Some(borders) = &image.element.borders {
         write_box(xml, borders, indent + 1);
     }
@@ -526,6 +526,15 @@ fn write_section(xml: &mut String, indent: usize, section: &ColumnSection) {
 }
 
 fn write_report_element(xml: &mut String, element: &ReportElement, indent: usize) {
+    write_report_element_with(xml, element, indent, &std::collections::BTreeMap::new());
+}
+
+fn write_report_element_with(
+    xml: &mut String,
+    element: &ReportElement,
+    indent: usize,
+    pictures: &std::collections::BTreeMap<String, String>,
+) {
     let pad = "\t".repeat(indent);
     let _ = writeln!(
         xml,
@@ -544,7 +553,20 @@ fn write_report_element(xml: &mut String, element: &ReportElement, indent: usize
     if element.position != PositionType::FixRelativeToTop {
         let _ = write!(xml, " positionType=\"{}\"", position_name(element.position));
     }
-    xml.push_str("/>");
+    if pictures.is_empty() {
+        xml.push_str("/>");
+        return;
+    }
+    xml.push_str(">\n");
+    for (name, value) in pictures {
+        let _ = writeln!(
+            xml,
+            "{pad}\t<property name=\"{}\" value=\"{}\"/>",
+            escape(name),
+            escape(value)
+        );
+    }
+    let _ = write!(xml, "{pad}</reportElement>");
 }
 
 fn write_box(xml: &mut String, borders: &Box, indent: usize) {

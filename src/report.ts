@@ -130,6 +130,7 @@ export type Element =
       onErrorType?: "error" | "blank" | "icon" | null;
       evaluationTime?: string | null;
       evaluationGroup?: string | null;
+      pictures?: Record<string, string>;
     }
   | { type: "break"; element: ReportElement; column: boolean }
   | {
@@ -237,6 +238,27 @@ export const BAND_LABEL: Record<BandKind, string> = {
 };
 
 export type Tool = "staticText" | "textField" | "image" | "line" | "rectangle" | "table" | "chart" | "subreport";
+
+export const IMAGE_EXPRESSION_CLASSES = ["java.lang.String", "java.io.File", "java.net.URL"] as const;
+
+export function imageExpressionClassSupported(className: string | null | undefined): boolean {
+  const name = className?.trim() || "java.lang.String";
+  return (IMAGE_EXPRESSION_CLASSES as readonly string[]).includes(name);
+}
+
+export function imageExpressionClassNote(className: string | null | undefined): string {
+  const name = className?.trim() || "java.lang.String";
+  switch (name) {
+    case "java.lang.String":
+      return "Pdfrost reads this as a file path or as base64. Studio draws a path. A base64 value stays blank in Studio.";
+    case "java.io.File":
+      return "new java.io.File(...) reads that path. Other text is still a path or base64.";
+    case "java.net.URL":
+      return "new java.net.URL(...) reads that address. An http or https address stays unloaded. Other text is still a path or base64.";
+    default:
+      return `${name} is not supported. Pdfrost still reads the text as a path or as base64. Choose String, File, or URL before saving so Studio can open the expression.`;
+  }
+}
 
 export const CHART_KINDS: { id: string; label: string }[] = [
   { id: "barChart", label: "Bar" },
@@ -412,6 +434,96 @@ export function applyResize(
 
 export function fieldExpression(name: string): string {
   return `$F{${name}}`;
+}
+
+export function imagePropertyName(fileName: string, used: string[]): string {
+  const baseName = fileName.split(/[/\\]/).pop() ?? "image";
+  const stem = baseName.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_]/g, "");
+  const base = stem && !/^[0-9]/.test(stem) ? stem : `image${stem}`;
+  const taken = used.map((name) => (name.startsWith("pdfrost.") ? name.slice("pdfrost.".length) : name));
+  return `pdfrost.${uniqueName(taken, base)}`;
+}
+
+export function imagePictureName(expression: string, pictures: Record<string, string> | undefined): string | null {
+  if (!pictures) {
+    return null;
+  }
+  const names = new Set(imageFieldNames(expression).filter((name) => name in pictures));
+  return names.size === 1 ? [...names][0] : null;
+}
+
+function imageFieldNames(expression: string): string[] {
+  return [...expression.matchAll(/\$F\{([^}]+)\}/g)].map((match) => match[1]);
+}
+
+function locationArgument(expression: string): string | null {
+  const trimmed = expression.trim();
+  for (const prefix of ["new java.io.File(", "new java.net.URL("]) {
+    if (!trimmed.startsWith(prefix) || !trimmed.endsWith(")")) {
+      continue;
+    }
+    const inner = trimmed.slice(prefix.length, -1).trim();
+    if (isLocationArgument(inner)) {
+      return inner;
+    }
+  }
+  return null;
+}
+
+function isLocationArgument(value: string): boolean {
+  return (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) || /^\$F\{[^}]+\}$/.test(value);
+}
+
+export function imageExpressionForClass(
+  expression: string,
+  className: string,
+): { expression: string; expressionClass: string | null } | null {
+  if (className !== "java.lang.String" && className !== "java.io.File" && className !== "java.net.URL") {
+    return { expression, expressionClass: className };
+  }
+  const argument = locationArgument(expression) ?? expression.trim();
+  if (className === "java.lang.String") {
+    if (!argument || isLocationArgument(argument)) {
+      return { expression: argument, expressionClass: null };
+    }
+    return null;
+  }
+  if (!isLocationArgument(argument)) {
+    return null;
+  }
+  const call = className === "java.io.File" ? "new java.io.File" : "new java.net.URL";
+  return { expression: `${call}(${argument})`, expressionClass: className };
+}
+
+export function imageClassForExpression(expression: string): string | null | undefined {
+  const trimmed = expression.trim();
+  if (!trimmed || isLocationArgument(trimmed)) {
+    return null;
+  }
+  if (trimmed.startsWith("new java.io.File(") && locationArgument(trimmed) !== null) {
+    return "java.io.File";
+  }
+  if (trimmed.startsWith("new java.net.URL(") && locationArgument(trimmed) !== null) {
+    return "java.net.URL";
+  }
+  return undefined;
+}
+
+export function retainedImagePictures(
+  expression: string,
+  pictures: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!pictures) {
+    return undefined;
+  }
+  const referenced = new Set(imageFieldNames(expression));
+  const next: Record<string, string> = {};
+  for (const [name, value] of Object.entries(pictures)) {
+    if (referenced.has(name)) {
+      next[name] = value;
+    }
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 export function chartExpression(value: string): string {

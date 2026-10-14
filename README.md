@@ -97,10 +97,10 @@ fn main() {
 ## Go
 
 ```bash
-go get github.com/xeonn/pdfrost/go@v0.2.0
+go get github.com/xeonn/pdfrost/go@v0.3.0
 ```
 
-The module is the `go/` directory, so the Git tag is `go/v0.2.0`. That tag is version `v0.2.0` of `github.com/xeonn/pdfrost/go`. The download includes a ready-made copy of the engine. Building the Go program does not require Rust.
+The module is the `go/` directory, so the Git tag is `go/v0.3.0`. That tag is version `v0.3.0` of `github.com/xeonn/pdfrost/go`. The download includes a ready-made copy of the engine. Building the Go program does not require Rust.
 
 ```go
 import (
@@ -169,4 +169,4 @@ bun run tauri dev
 | `src-tauri/`, `src/` | The desktop app. |
 | `jrxmls/` | Sample templates and the JSON files that fill them. |
 | `docs/` | Notes on what is supported and how the app is built. |
-| `CHANGELOG.md` | Release notes. 0.2.0 is the changes since `go/v0.1.0`. |
+| `CHANGELOG.md` | Release notes. 0.3.0 is the image changes since `go/v0.2.0`. |

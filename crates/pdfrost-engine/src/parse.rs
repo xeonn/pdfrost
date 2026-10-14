@@ -174,7 +174,7 @@ impl Parser {
         if name == JSON_FIELD_EXPRESSION {
             return node.attribute("value").map(str::to_string);
         }
-        if name.starts_with(STUDIO_PROPERTY_PREFIX) {
+        if name.starts_with(STUDIO_PROPERTY_PREFIX) || name.starts_with("pdfrost.") {
             return None;
         }
         self.warn("property", location);
@@ -798,6 +798,7 @@ impl Parser {
             let child_location = join(location, name);
             match name {
                 "reportElement" if !saw_frame => {
+                    image.pictures = Self::pdfrost_pictures(child);
                     image.element = self.parse_report_element(child, &child_location);
                     saw_frame = true;
                 }
@@ -894,6 +895,28 @@ impl Parser {
             column,
         })
     }
+
+fn pdfrost_pictures(node: Node<'_, '_>) -> std::collections::BTreeMap<String, String> {
+    let mut pictures = std::collections::BTreeMap::new();
+    for child in element_children(node) {
+        if child.tag_name().name() != "property" {
+            continue;
+        }
+        let Some(name) = child.attribute("name") else {
+            continue;
+        };
+        if !name.starts_with("pdfrost.") {
+            continue;
+        }
+        let Some(value) = child.attribute("value") else {
+            continue;
+        };
+        if !value.is_empty() {
+            pictures.insert(name.to_string(), value.to_string());
+        }
+    }
+    pictures
+}
 
     fn parse_report_element(&mut self, node: Node<'_, '_>, location: &str) -> ReportElement {
         let mut element = ReportElement {

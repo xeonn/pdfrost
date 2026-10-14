@@ -1,6 +1,6 @@
 [package]
 name = "pdfrost-engine"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.92"
 description = "JRXML subset to PDF for pdfrost"
@@ -9,6 +9,7 @@ description = "JRXML subset to PDF for pdfrost"
 name = "pdfrost_engine"
 
 [dependencies]
+base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 krilla = "0.8"

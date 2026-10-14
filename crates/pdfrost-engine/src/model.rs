@@ -1,5 +1,7 @@
 //! Typed JRXML. Later phases fill and draw these values; they do not re-read the XML.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 /// A parsed template and the warnings found while reading it.
@@ -385,6 +387,10 @@ pub struct Image {
     /// Raw `imageExpression` text, including the quotes of a string literal.
     #[serde(default)]
     pub expression: String,
+    /// Pdfrost picture bytes. The key is a `pdfrost.` property name, and the value is raw base64.
+    /// `$F{name}` reads this value before the JSON field of the same name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub pictures: BTreeMap<String, String>,
     /// `imageExpression class` when it is not `java.lang.String`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expression_class: Option<String>,
