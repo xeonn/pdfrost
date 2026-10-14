@@ -13,6 +13,7 @@ Read them in this order:
 | [Architecture](architecture.md) | How the library, the desktop shell, and the window split the work. |
 | [Report pipeline](report-pipeline.md) | How a template and a JSON file become a PDF, and the library call that does it. |
 | [JRXML subset](jrxml-subset.md) | Which parts of a template are drawn, kept, or reported as a warning. |
+| [Images](images.md) | How an image expression is loaded, including base64, and why a file path does not draw in the Go package. |
 | [Charts](charts.md) | Bar, line, and area charts, drawn in the Chart.js 4.4.6 colors. |
 | [Viewer](viewer.md) | The Preview screen: open a template, choose a JSON file, and read the PDF. |
 | [Designer](designer.md) | The Design screen: the page, the outline, the tool palette, the properties, and saving. |

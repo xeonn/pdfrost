@@ -27,6 +27,11 @@ import {
   elementLabel,
   ensureBand,
   expressionChoices,
+  IMAGE_EXPRESSION_CLASSES,
+  imageExpressionClassNote,
+  imageExpressionClassSupported,
+  imagePictureName,
+  imagePropertyName,
   datasetListPath,
   fieldsFromDiscovery,
   applyStudioExpressions,
@@ -813,22 +818,26 @@ function onCanvasDrop(event: DragEvent): void {
   if (!armed && !fieldName) {
     return;
   }
+  let placed: number | null = null;
   edit(() => {
-    const index = armed
+    placed = armed
       ? placeElement(report.value!, hit.index, armed, hit.x, hit.y)
       : fieldName
         ? placeField(report.value!, hit.index, fieldName, hit.x, hit.y)
         : null;
-    if (index === null) {
+    if (placed === null) {
       if (armed === "table") {
         error.value = "Tables go on the Detail band.";
       }
       return;
     }
     error.value = "";
-    selection.value = { kind: "element", band: hit.index, index };
+    selection.value = { kind: "element", band: hit.index, index: placed };
     tool.value = null;
   });
+  if (armed === "image" && placed !== null) {
+    void browseImageAt(hit.index, placed);
+  }
 }
 
 function onBandClick(event: MouseEvent, bandIndex: number): void {
@@ -841,24 +850,28 @@ function onBandClick(event: MouseEvent, bandIndex: number): void {
   }
   const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
   const armed = tool.value;
+  let placed: number | null = null;
   edit(() => {
-    const index = placeElement(
+    placed = placeElement(
       report.value!,
       bandIndex,
       armed,
       (event.clientX - bounds.left) / scale.value,
       (event.clientY - bounds.top) / scale.value,
     );
-    if (index === null) {
+    if (placed === null) {
       if (armed === "table") {
         error.value = "Tables go on the Detail band.";
       }
       return;
     }
     error.value = "";
-    selection.value = { kind: "element", band: bandIndex, index };
+    selection.value = { kind: "element", band: bandIndex, index: placed };
     tool.value = null;
   });
+  if (armed === "image" && placed !== null) {
+    void browseImageAt(bandIndex, placed);
+  }
 }
 
 function onElementPointerDown(event: PointerEvent, bandIndex: number, index: number): void {
@@ -1087,6 +1100,98 @@ function setSubreportSource(path: string): void {
   edit(() => {
     if (editedElement.value?.type === "subreport") {
       editedElement.value.dataSource = path.trim() || null;
+    }
+  });
+}
+
+function imageAt(bandIndex: number, index: number): Extract<Element, { type: "image" }> | null {
+  const element = report.value?.bands[bandIndex]?.elements[index];
+  return element?.type === "image" ? element : null;
+}
+
+function usedImageNames(except: string | null): string[] {
+  const names = (report.value?.fields ?? []).map((field) => field.name);
+  for (const band of report.value?.bands ?? []) {
+    for (const element of band.elements) {
+      if (element.type !== "image" || !element.pictures) {
+        continue;
+      }
+      names.push(...Object.keys(element.pictures));
+    }
+  }
+  return except ? names.filter((name) => name !== except) : names;
+}
+
+async function pickImageFile(): Promise<{ path: string; base64: string } | null> {
+  const picked = await open({
+    multiple: false,
+    filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg"] }],
+  });
+  if (typeof picked !== "string") {
+    return null;
+  }
+  try {
+    const dataUri = await invoke<string>("read_image", {
+      templatePath: props.templatePath,
+      source: picked,
+    });
+    const comma = dataUri.indexOf(",");
+    const base64 = comma >= 0 ? dataUri.slice(comma + 1) : "";
+    if (!base64) {
+      error.value = "Choose a PNG or JPEG file.";
+      return null;
+    }
+    return { path: picked, base64 };
+  } catch (err) {
+    error.value = message(err);
+    return null;
+  }
+}
+
+function storeImage(element: Extract<Element, { type: "image" }>, path: string, base64: string): void {
+  if (!report.value) {
+    return;
+  }
+  const current = imagePictureName(element.expression, element.pictures);
+  const name = current ?? imagePropertyName(path, usedImageNames(current));
+  element.pictures = { ...(element.pictures ?? {}), [name]: base64 };
+  element.expression = `$F{${name}}`;
+  element.expressionClass = null;
+  if (!report.value.fields.some((field) => field.name === name)) {
+    report.value.fields.push({
+      name,
+      className: "java.lang.String",
+      description: null,
+      jsonPath: null,
+    });
+  }
+  error.value = "";
+}
+
+async function browseImageAt(bandIndex: number, index: number): Promise<void> {
+  const picked = await pickImageFile();
+  if (!picked) {
+    return;
+  }
+  edit(() => {
+    const element = imageAt(bandIndex, index);
+    if (element) {
+      storeImage(element, picked.path, picked.base64);
+    }
+  });
+}
+
+async function browseSelectedImage(): Promise<void> {
+  if (editedElement.value?.type !== "image") {
+    return;
+  }
+  const picked = await pickImageFile();
+  if (!picked) {
+    return;
+  }
+  edit(() => {
+    if (editedElement.value?.type === "image") {
+      storeImage(editedElement.value, picked.path, picked.base64);
     }
   });
 }
@@ -1410,6 +1515,12 @@ function imagePreview(element: Element): string {
   if (element.type !== "image") {
     return "";
   }
+  const stored = imagePictureName(element.expression, element.pictures);
+  const picture = stored ? element.pictures?.[stored] : "";
+  if (picture) {
+    const mime = picture.startsWith("/9j/") ? "image/jpeg" : "image/png";
+    return `data:${mime};base64,${picture}`;
+  }
   const source = quotedImageSource(element.expression);
   return source ? (imagePreviews.value[source] ?? "") : "";
 }
@@ -1449,6 +1560,10 @@ function commitImageExpression(raw: string): string {
     return trimmed;
   }
   return `"${trimmed.replaceAll('"', "")}"`;
+}
+
+function commitImageExpressionClass(value: string): string | null {
+  return value === "java.lang.String" ? null : value;
 }
 
 function fillStyle(element: Element): Record<string, string> {
@@ -3031,15 +3146,34 @@ onBeforeUnmount(() => {
                   @change="edit(() => { if (editedElement?.type === 'image') editedElement.expression = commitImageExpression(($event.target as HTMLInputElement).value); })"
                 />
               </label>
+              <FwbButton size="xs" @click="browseSelectedImage">Browse</FwbButton>
+              <p v-if="imagePictureName(editedElement.expression, editedElement.pictures)" class="text-xs text-gray-500">
+                Stored as base64 on property {{ imagePictureName(editedElement.expression, editedElement.pictures) }}. Studio keeps the property. Studio draws this field when its value is a path.
+              </p>
               <label class="block text-xs text-gray-400">
                 Expression class
-                <input
+                <select
                   :class="inputClass"
-                  :value="editedElement.expressionClass ?? ''"
-                  placeholder="java.lang.String"
-                  @change="edit(() => { if (editedElement?.type === 'image') editedElement.expressionClass = ($event.target as HTMLInputElement).value.trim() || null; })"
-                />
+                  :value="editedElement.expressionClass || 'java.lang.String'"
+                  @change="edit(() => { if (editedElement?.type === 'image') editedElement.expressionClass = commitImageExpressionClass(($event.target as HTMLSelectElement).value); })"
+                >
+                  <option
+                    v-if="editedElement.expressionClass && !imageExpressionClassSupported(editedElement.expressionClass)"
+                    :value="editedElement.expressionClass"
+                  >
+                    {{ editedElement.expressionClass }}
+                  </option>
+                  <option v-for="className in IMAGE_EXPRESSION_CLASSES" :key="className" :value="className">
+                    {{ className }}
+                  </option>
+                </select>
               </label>
+              <p
+                class="text-xs"
+                :class="imageExpressionClassSupported(editedElement.expressionClass) ? 'text-gray-500' : 'text-amber-400'"
+              >
+                {{ imageExpressionClassNote(editedElement.expressionClass) }}
+              </p>
               <label class="block text-xs text-gray-400">
                 Scale
                 <select :class="inputClass" :value="editedElement.scaleImage ?? ''" @change="edit(() => { if (editedElement?.type === 'image') editedElement.scaleImage = (($event.target as HTMLSelectElement).value || null) as typeof editedElement.scaleImage; })">

@@ -1,3 +1,4 @@
+use base64::Engine as _;
 use chrono::{TimeZone, Utc};
 use pdfrost_engine::{
     parse, render, render_with_assets, write_report, BandKind, Element, HorizontalImageAlign,
@@ -196,6 +197,81 @@ fn image_round_trips_its_attributes_and_paints_a_file_beside_the_template() {
         .warnings
         .iter()
         .all(|warning| !warning.tag.starts_with("image:")));
+}
+
+#[test]
+fn a_base64_field_paints_without_a_file() {
+    let encoded = base64::engine::general_purpose::STANDARD.encode(PNG_1X1);
+    let xml = report(
+        r#"<field name="logo" class="java.lang.String">
+      <property name="net.sf.jasperreports.json.field.expression" value="logo"/>
+    </field>
+    <title>
+    <band height="40" splitType="Stretch">
+      <image scaleImage="RetainShape" onErrorType="Error">
+        <reportElement x="0" y="0" width="20" height="20"/>
+        <imageExpression><![CDATA[$F{logo}]]></imageExpression>
+      </image>
+    </band>
+  </title>"#,
+    );
+    let output = render(&xml, &json!({ "logo": encoded }), when()).unwrap();
+    assert!(output.warnings.is_empty(), "{:?}", output.warnings);
+    assert!(output
+        .placements
+        .iter()
+        .any(|placement| placement.kind == PlacementKind::Image));
+    assert!(output.pdf.windows(6).any(|bytes| bytes == b"/Image"));
+}
+
+#[test]
+fn a_pdfrost_property_paints_and_round_trips() {
+    let encoded = base64::engine::general_purpose::STANDARD.encode(PNG_1X1);
+    let xml = report(&format!(
+        r#"<title>
+    <band height="40" splitType="Stretch">
+      <image>
+        <reportElement x="0" y="0" width="20" height="20">
+          <property name="pdfrost.logo" value="{encoded}"/>
+        </reportElement>
+        <imageExpression><![CDATA[$F{{pdfrost.logo}}]]></imageExpression>
+      </image>
+    </band>
+  </title>"#
+    ));
+    let output = render(&xml, &json!({}), when()).unwrap();
+    assert!(output.warnings.is_empty(), "{:?}", output.warnings);
+    assert!(output
+        .placements
+        .iter()
+        .any(|placement| placement.kind == PlacementKind::Image));
+    let parsed = parse(&xml).unwrap();
+    let written = write_report(&parsed);
+    assert!(written.contains("name=\"pdfrost.logo\""));
+    assert!(written.contains(&format!("value=\"{encoded}\"")));
+    assert!(written.contains("$F{pdfrost.logo}") || written.contains("$F{{pdfrost.logo}}"));
+}
+
+#[test]
+fn a_studio_base64_stream_paints_the_field() {
+    let encoded = base64::engine::general_purpose::STANDARD.encode(PNG_1X1);
+    let xml = report(
+        r#"<field name="logoBase64" class="java.lang.String"/>
+    <title>
+    <band height="40" splitType="Stretch">
+      <image onErrorType="Error">
+        <reportElement x="0" y="0" width="20" height="20"/>
+        <imageExpression><![CDATA[new java.io.ByteArrayInputStream(java.util.Base64.getMimeDecoder().decode($F{logoBase64}.trim()))]]></imageExpression>
+      </image>
+    </band>
+  </title>"#,
+    );
+    let output = render(&xml, &json!({ "logoBase64": encoded }), when()).unwrap();
+    assert!(output.warnings.is_empty(), "{:?}", output.warnings);
+    assert!(output
+        .placements
+        .iter()
+        .any(|placement| placement.kind == PlacementKind::Image));
 }
 
 const PNG_1X1: &[u8] = &[
